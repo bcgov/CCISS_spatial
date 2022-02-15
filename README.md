@@ -1,5 +1,7 @@
 # CCISS_spatial
-A spatial module for the Climate Change Informed Species Selection (CCISS) tool. 
+A spatial module for the Climate Change Informed Species Selection (CCISS) tool for CWU development.
+
+Directory Working_App contains files for initial spatial prototype that may or may not prove useful. Directory _functions contains R script with two functions for generating feasibility statistics from the BGC projection data. 
 
 [![Lifecycle:Experimental](https://img.shields.io/badge/Lifecycle-Experimental-339999)](<Redirect-URL>)
 
