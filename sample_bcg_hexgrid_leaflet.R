@@ -4,7 +4,11 @@ library(dplyr)
 library(dbplyr)
 library(leaflet)
 library(rpostgis)
+library(RPostgres)
 library(profvis)
+library(mapview)
+library(mapdeck)
+library(pool)
 
 dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
   cciss_sql <- paste0("
@@ -39,7 +43,7 @@ dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
   return(dat)
 }
 
-profvis({
+
 
 pool <- dbPool(
   drv = RPostgres::Postgres(),
@@ -51,12 +55,14 @@ pool <- dbPool(
 )
 
 #plot hexgrid by district: Cassiar Subdistrict
+profvis({
 
-ids <- dbGetQuery(pool, "select siteno, district from grid_dist
-                         where district = 'Cassiar Subdistrict'")
-
-hex_sf <- st_read(pool, query = paste0("select * from hex_grid where siteno IN (", paste(ids$siteno[1:1000], collapse = ' , '),")"))
-
+hex_sf <- st_read(pool,
+                  query = "select a.siteno, a.district, b.geom 
+                         from grid_dist a
+                         join hex_grid b
+                         on a.siteno = b.siteno
+                         where a.district = 'Cassiar Subdistrict' ")
 
 #join prediction results
 gcmOpts <- dbGetQuery(pool, "select gcm from gcm")[1,1]
@@ -64,19 +70,32 @@ scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[1,1]
 periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[1,1]
 
 ##eg to retrieve all projections for hex cell # 6:
-bcg_predictions <- dbGetCCISSRaw(pool,ids$siteno[1:1000],gcmOpts,scenarioOpts,periodOpts)
+bcg_predictions <- dbGetCCISSRaw(pool,hex_sf$siteno,gcmOpts,scenarioOpts,periodOpts)
 
-hex_map <- merge(hex_sf, bcg_predictions[, c('siteno', 'bgc_pred')])
-  
+
+#dissolve geometries to reduce number of polygons for plotting:
+hex_map <- hex_sf %>%
+           left_join(bcg_predictions[, c('siteno', 'bgc_pred')])
+
+hex_map <- aggregate(hex_map, by = list(hex_map$bgc_pred), FUN = mean)
+
 # join prediction color schema
 colors <- read.csv('WNA_v12_HexCols.csv')
+
 hex_map <- hex_map %>%
-           left_join(colors, by = c('bgc_pred' = 'BGC'))
+           left_join(colors, by = c('Group.1' = 'BGC'))
+
 
 
 #apply correct projection
 hex <- st_transform(hex_map, 4326)
-#plot(hex)
+
+})
+
+#hex <- ms_simplify(hex)
+
+
+system.time(
 
 #overlap hex grid on leaflet
 hex %>%
@@ -90,4 +109,28 @@ leaflet() %>%
   )
 
 
-})
+
+)
+
+
+system.time(
+  
+  #hex <- st_simplify(hex)
+  #try mapview for plotting
+  mapview(hex, zcol = "Group.1", col.regions = colors$Col ,legend = F, alpha = 0.6)
+  
+)
+
+#use mapdeck (mapbox)
+mapbox_token <- Sys.getenv("MAPBOX_TOKEN")
+
+
+system.time(
+mapdeck(token = mapbox_token, style = mapdeck_style("light")) %>%
+  add_polygon(
+    data = hex
+    , layer = "polygon_layer"
+    , fill_colour = "Col"
+  
+  )
+)
