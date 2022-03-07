@@ -1,0 +1,44 @@
+.navbar{
+  height: 70px;
+  min-height:70px !important;
+}
+
+
+.navbar-nav > li > a, .navbar-brand {
+                            padding-top:15px !important; 
+                            height: 70px;
+                            line-height: 40px;
+                            font-size: 15px;
+                            }
+
+
+.navbar-default .navbar-brand {
+    color: #fff;
+  
+}
+
+
+
+.navbar-default {
+    background-color: #003366;
+    border-bottom: 2px solid #fcba19;
+    color: #fff
+}
+
+.navbar-default .navbar-nav>li>a {
+    color: #fff;
+}
+
+.navbar-nav>li>a {
+/*    
+}
+
+.navbar-default .navbar-nav>li>a:focus, .navbar-default .navbar-nav>li>a:hover {
+    color: #f0f0f0;
+    text-decoration: underline;
+}
+
+.navbar-default .navbar-brand {
+    height: 60px;
+    padding: 5px 15px;
+}
