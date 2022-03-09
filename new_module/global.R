@@ -2,11 +2,13 @@
 
 library(shiny)
 library(shinythemes)
+library(shinyWidgets)
 library(leaflet)
+library(leaflet.extras2)
+#library(leaflet.opacity)
 library(sf)
 library(dplyr)
 library(dbplyr)
-library(leaflet)
 library(rpostgis)
 library(DBI)
 library(RPostgres)
@@ -20,23 +22,25 @@ library(shinyjs)
 #database connection
 pool <- dbPool(
   drv = RPostgres::Postgres(),
-  dbname = Sys.getenv("BCGOV_DB"),
-  host = Sys.getenv("BCGOV_HOST"),
+  #dbname = Sys.getenv("BCGOV_DB"),
+  #host = Sys.getenv("BCGOV_HOST"),
+  dbname = 'postgres',
+  host = Sys.getenv("AWS_HOST"),
   port = 5432, 
   user = Sys.getenv("BCGOV_USR"),
   password = Sys.getenv("BCGOV_PWD")
 )
 
 #load options for selectInput(s)
-gcmOpts <- dbGetQuery(pool, "select gcm from gcm")
-scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")
-periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")
-districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")
+gcmOpts <- dbGetQuery(pool, "select gcm from gcm")[,1]
+scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[,1]
+periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[,1]
+districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")[,2]
 
 
 #load color scheme for BCG prediction
-bcg_colors <- read.csv('WNA_v12_HexCols.csv')
-
+bgc_colors <- read.csv('WNA_v12_HexCols.csv')
+load('Dist_MapBoundaries.Rdata')
 
 
 #load util functions:
@@ -71,4 +75,17 @@ dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
   dat <- setDT(RPostgres::dbGetQuery(con, cciss_sql))
   dat <- unique(dat)
   return(dat)
+}
+
+
+dbGetbgc <- function(con, period, scn, gcm, dist){
+  
+  sql_query <- paste0("select bgc_pred, geom from aggregated_bcg
+          where futureperiod = '",period, "'
+          and   scenario = '", scn , "'
+          and   gcm = '", gcm, "'
+          and dist_code IN ('", paste(unique(dist), collapse = "','"), "')
+          ")
+  
+  st_read(con, query = sql_query)
 }

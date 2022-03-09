@@ -11,36 +11,60 @@ ui <- tagList(
           
            tabPanel("App",
                     
-                  div(id = 'Sidebar',
-                  sidebarPanel(
-                           
+                  #div(id = 'Sidebar',
+                  #sidebarPanel(
+                  column(8,
+                  absolutePanel(top = 60, left = 5, right = "auto", bottom = "auto",
+                                width = 300, height = "auto",draggable = TRUE,
+                    
+                    wellPanel(
                            selectInput("dist", 
                                        label = "Select a district",
-                                       choices = districts$district),
+                                       choices = c("All BC", districts),
+                                       selected = "DSI"
+                                       ),
                            
                            radioButtons("type", inline = FALSE, 
                                         label = "Choose the type of map",
-                                        choices = list("Climate variables" = 1, "Biogeoclimatic units" = 2, "Species feasibility" = 3),
-                                        selected = 2),
+                                        choices = list("Biogeoclimatic units" = 1, "Species feasibility" = 2),
+                                        selected = 1),
+                           
+                           
+                           conditionalPanel(
+                             condition = "input.type == 1",
+                             selectInput("col1_gcm","Select GCM",choices = gcmOpts),
+                             radioButtons("col1_scn","Select Scenario", choices = scenarioOpts)
+                             
+                           ),
+                           
+                           conditionalPanel(
+                             condition = "input.type ==2",
+                             selectInput("sppPick","Select Tree Species",choices = c("Choose one" = "", "")),
+                             selectInput("edaPick","Select Site Position",choices = c("C4","B2","D6"),selected = "C4"),
+                             radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change","Loss/Gain"),
+                                          selected = "Feasibility")
+                           ),
+                           
                            
                            radioButtons("time",
                                         label = "Choose a time period",
-                                        choices = periodOpts$futureperiod
-                           ) 
-                    )),
+                                        choices = periodOpts
+                           )
+                           
+                           #switchInput(inputId = "showlegend", value = FALSE, label = "Show map legend")
+                    ),
+                    style = "opacity: 0.65; z-index: 10 !important;"),
                     
-                    
-                    mainPanel(
+                  leafletOutput(outputId = "map", height = 700) ),
+                    #mainPanel(
                       
-                      column(5,
-                             actionButton("showSidebar", "Show sidebar"),
-                             leafletOutput(outputId = "map") ),
                       
-                      column(5, 
+                      
+                      column(4, 
                              selectInput("var1", 
                                          label = "Choose the x-axis variable",
                                          choices = ""))
-                    ) 
+                    #) 
             
           
            
