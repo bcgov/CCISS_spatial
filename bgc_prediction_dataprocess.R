@@ -96,7 +96,7 @@ doParallel::registerDoParallel(cl = my.cluster)
 Sys.time()
 
 
-results <- foreach(i = 1,
+results <- foreach(i = 4:6,
                    #.combine = rbind,
                    .packages = c('sf','rpostgis','RPostgres','DBI','pool')) %dopar% {
                      
@@ -110,15 +110,18 @@ results <- foreach(i = 1,
                      )
     
   dat <- aggregate_geom_bcg_pred(pool, 
-                                 dist_code = dists[i], 
+                                 dist_code = dists, 
                                  period = periodOpts, 
                                  scenario = scenarioOpts, 
                                  gcm = gcmOpts)
   
-  #write results (in case database connection fail)
-  saveRDS(dat, paste0('aggregated_bcg_data/bcg_',i,'.rds'))
-  
+  #write results database(in case database connection fail)
+  st_write(bcg_2, dsn = pool, layer = "aggregated_bcg", append = TRUE)
+  #saveRDS(dat, paste0('aggregated_bcg_data/bcg_',i,'.rds'))
+  dat
 }
 
 
 Sys.time()
+
+
