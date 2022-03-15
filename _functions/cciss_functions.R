@@ -8,11 +8,9 @@ library(RPostgres)
 library(dplyr)
 library(foreach)
 library(rmapshaper)
-library(tictoc)
 library(rasterVis)
 library(raster)
 library(ccissdev)
-library(RPostgreSQL)
 library(sf)
 library(pool)
 
@@ -51,7 +49,7 @@ ccissMap <- function(SSPred,suit,spp_select){
   suitVotes <- suitVotes[,lapply(.SD, sum),.SDcols = colNms, 
                          by = .(SiteRef,FuturePeriod, SS_NoSpace,Spp,Curr)]
   suitVotes[,NewSuit := `1`+(`2`*2)+(`3`*3)+(X*5)]
-  suitRes <- suitVotes[,.(Curr = mean(Curr),NewSuit = mean(NewSuit)), by = .(SiteRef)]
+  suitRes <- suitVotes[,.(Curr = mean(Curr),NewSuit = mean(NewSuit)), by = .(SiteRef,FuturePeriod)]
   return(suitRes)
 }
 
@@ -91,3 +89,41 @@ add_retreat <- function(SSPred,suit,spp_select){
   setkey(suitRes,SiteRef)
   suitRes[Flag == "Retreat",PropMod := PropMod * -1]
 }
+
+##eg to calculate feasibility for hex cells (6476259,6477778,6691980,6699297)
+
+pool <- dbPool(
+  drv = RPostgres::Postgres(),
+  dbname = Sys.getenv("BCGOV_DB"),
+  host = Sys.getenv("BCGOV_HOST"),
+  port = 5432, 
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+)
+
+### create parameter input charts: this part's a bit clunkly, but it was 
+### the easiest way to set up the ccissdev app to weight different options differently - you can mainly ignore it
+gcm_weight <- data.table(gcm = c("ACCESS-ESM1-5", "BCC-CSM2-MR", "CanESM5", "CNRM-ESM2-1", "EC-Earth3", 
+                                 "GFDL-ESM4", "GISS-E2-1-G", "INM-CM5-0", "IPSL-CM6A-LR", "MIROC6", 
+                                 "MPI-ESM1-2-HR", "MRI-ESM2-0", "UKESM1-0-LL"),
+                         weight = c(1,1,0,0,1,1,1,0,1,1,1,1,0))
+
+rcp_weight <- data.table(rcp = c("ssp126","ssp245","ssp370","ssp585"), 
+                         weight = c(0.8,1,0.8,0))
+
+all_weight <- as.data.table(expand.grid(gcm = gcm_weight$gcm,rcp = rcp_weight$rcp))
+all_weight[gcm_weight,wgcm := i.weight, on = "gcm"]
+all_weight[rcp_weight,wrcp := i.weight, on = "rcp"]
+all_weight[,weight := wgcm*wrcp]
+
+siteno = c(6476259,6477778,6691980,6699297)
+bgc <- dbGetCCISS(pool, siteno, FALSE, all_weight)##pull from database
+SSPred <- edatopicOverlap(bgc, E1,E1_Phase,onlyRegular = T)##create site series overlap
+
+##the "newSuit" column in sppFeas is the predicted feasibility value
+## for a specific time period that should be shown on the map
+sppFeas <- ccissMap(SSPred,S1, spp_select = "Fd")
+
+
+
+  

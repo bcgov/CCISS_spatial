@@ -1,0 +1,62 @@
+{
+  "options": {
+    "paths": {
+      "root": "",
+      "styles": "",
+      "mbtiles": ""
+    },
+    "formatQuality": {
+      "jpeg": 80,
+      "webp": 90
+    },
+    "maxScaleFactor": 3,
+    "maxSize": 2048,
+    "pbfAlias": "pbf",
+    "serveAllFonts": false,
+    "serveAllStyles": false,
+    "serveStaticMaps": true,
+    "tileMargin": 0
+  },
+  "styles": {
+    "basic": {
+      "serve_rendered": false,
+      "tilejson": {
+        "type": "overlay",
+        "bounds": [-139.06131, 30.29681, -109.05415, 60.00478]
+      }
+    },
+    "rendered": {
+      "serve_rendered": true,
+      "tilejson": {
+        "type": "overlay",
+        "bounds": [-139.06131, 30.29681, -109.05415, 60.00478]
+      }
+    }
+  },
+  "data": {
+    "BUL": {"mbtiles" : "BUL.mbtiles"},
+    "DRM": {"mbtiles" : "DRM.mbtiles"},
+    "DSI": {"mbtiles" : "DSI.mbtiles"},
+    "DCR": {"mbtiles" : "DCR.mbtiles"},
+    "DPG": {"mbtiles" : "DPG.mbtiles"},
+    "DPC": {"mbtiles" : "DPC.mbtiles"},
+    "DND": {"mbtiles" : "DND.mbtiles"},
+    "CAS": {"mbtiles" : "CAS.mbtiles"},
+    "DMK": {"mbtiles" : "DMK.mbtiles"},
+    "DQU": {"mbtiles" : "DQU.mbtiles"},
+    "DMH": {"mbtiles" : "DMH.mbtiles"},
+    "DSQ": {"mbtiles" : "DSQ.mbtiles"},
+    "DKA": {"mbtiles" : "DKA.mbtiles"},
+    "DCK": {"mbtiles" : "DCK.mbtiles"},
+    "DFN": {"mbtiles" : "DFN.mbtiles"},
+    "DSC": {"mbtiles" : "DSC.mbtiles"},
+    "DSE": {"mbtiles" : "DSE.mbtiles"},
+    "DOS": {"mbtiles" : "DOS.mbtiles"},
+    "DCC": {"mbtiles" : "DCC.mbtiles"},
+    "DCS": {"mbtiles" : "DCS.mbtiles"},
+    "DNI": {"mbtiles" : "DNI.mbtiles"},
+    "DKM": {"mbtiles" : "DKM.mbtiles"},
+    "DQC": {"mbtiles" : "DQC.mbtiles"},
+    "DVA": {"mbtiles" : "DVA.mbtiles"}
+  }
+}
