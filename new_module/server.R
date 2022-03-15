@@ -2,6 +2,7 @@ server <- function(input, output, session) {
   
   mapInputs <- reactiveValues()
   
+  
   observe({
     
     if(input$dist == "All BC"){
@@ -20,28 +21,58 @@ server <- function(input, output, session) {
     
   })
   
+  
+  #only query climate y axis data when switch is on
+  observeEvent(input$showclimate,{
+    
+    shinyjs::toggle("var2")
+    shinyjs::toggle("climatevarplot")
+    
+  })
+  
   mapData <- reactive({
     
     withProgress(message = "Retrieving data from database", value = 0, {
     
-    dat <- dbGetbgc(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm, mapInputs$dist)
+    #dat <- dbGetbgc(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm, mapInputs$dist)
+     
+     dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
     
     if(nrow(dat)>0) {
     
-    dat <- dat %>%
-      left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))
+    # dat <- dat %>%
+    #   left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))
     
-    incProgress(0.6, detail = "Convert to projection 4326")
+    incProgress(0.6, detail = "Reformating map data")
     
     #apply correct projection
-    dat <- st_transform(dat, crs = 4326)
+    #dat <- st_transform(dat, crs = 4326)
+    
+    bgcs <- unique(dat$bgc_pred)
+    bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
+      
+    dat[subzones,Col := i.Col, on = c(bgc_pred = "BGC")]
+    dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
+    bc_raster <- raster::setValues(bc_raster,NA)
+    bc_raster[dat$rast_id] <- dat$bgcID
+    bc_raster <- ratify(bc_raster)
+    
+    bgcID[subzones,Col := i.Col, on = c(bgc = "BGC")]
+    
+      
+    
+    incProgress(0.9)
     
     }else{
       
-    dat <- data.frame(dist_code = character())
+    #dat <- data.frame(dist_code = character())
+    bc_raster
     }
     
-    dat
+    #dat
+     
+    list(bc_raster = bc_raster,
+         bgcID = bgcID)
     
     })
     
@@ -72,7 +103,6 @@ server <- function(input, output, session) {
   
   output$map <- renderLeaflet({
     leaflet() %>%
-      fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
       addProviderTiles("CartoDB.Positron", group = "CartoDB.Positron")%>%
       addProviderTiles("OpenStreetMap.Mapnik", group= "OpenStreetMap")%>%
       addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
@@ -87,22 +117,54 @@ server <- function(input, output, session) {
   
   observe({
     
-    validate(
-      need(nrow(mapData())>0 , "Please select another data set")
-    )
+    # validate(
+    #   need(nrow(mapData())>0 , "Please select another data set")
+    # )
 
 
-    leafletProxy("map", data = mapData()) %>%
-      startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 10)) %>%
-      clearShapes() %>%
-      addPolygons(
-        fillColor = ~ Col,
-        color = ~ Col,
-        label = ~ bgc_pred
-      )%>%
-      stopSpinner()
+    # leafletProxy("map", data = mapData()) %>%
+    #   startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+    #   clearShapes() %>%
+    #   addPolygons(
+    #     fillColor = ~ Col,
+    #     color = ~ Col,
+    #     label = ~ bgc_pred
+    #   )%>%
+    #   stopSpinner()
     
+    leafletProxy("map") %>%
+      startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+      clearShapes() %>%
+      fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
+      addRasterImage(mapData()$bc_raster, colors = mapData()$bgcID$Col, opacity = 0.8)%>%
+      stopSpinner()
 
+
+  })
+  
+  
+  plotData <- reactive({
+    
+    #retrieve climate variables
+    mtcars
+  })
+  
+  output$scatterplot<- renderPlotly({
+    
+    p <- ggplot(plotData(), aes(wt, mpg))
+    p <-  p + geom_point()
+    
+    ggplotly(p)
+    
+  })
+  
+  
+  output$climatevarplot <- renderPlotly({
+    
+    p <- ggplot(mtcars, aes(wt, mpg))
+    p <-  p + geom_point()
+    
+    ggplotly(p)
   })
 
 

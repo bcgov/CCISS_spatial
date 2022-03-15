@@ -5,7 +5,7 @@ library(dbplyr)
 library(leaflet)
 library(rpostgis)
 library(RPostgres)
-library(profvis)
+#library(profvis)
 library(mapview)
 library(mapdeck)
 library(pool)
@@ -54,20 +54,17 @@ pool <- dbPool(
   password = Sys.getenv("BCGOV_PWD")
 )
 
-#plot hexgrid by district: Cassiar Subdistrict
-profvis({
+#plot hexgrid by district: Haida Gwaii Natural Resource District
 
 hex_sf <- st_read(pool,
-                  query = "select a.siteno, a.district, b.geom 
+                  query = "select a.siteno, a.district, a.geom
                          from grid_dist a
-                         join hex_grid b
-                         on a.siteno = b.siteno
-                         where a.district = 'Cassiar Subdistrict' ")
+                         where a.district = 'Haida Gwaii Natural Resource District' ")
 
 #join prediction results
 gcmOpts <- dbGetQuery(pool, "select gcm from gcm")[1,1]
 scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[1,1]
-periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[1,1]
+periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[2,1]
 
 ##eg to retrieve all projections for hex cell # 6:
 bcg_predictions <- dbGetCCISSRaw(pool,hex_sf$siteno,gcmOpts,scenarioOpts,periodOpts)
@@ -84,13 +81,12 @@ colors <- read.csv('WNA_v12_HexCols.csv')
 
 hex_map <- hex_map %>%
            left_join(colors, by = c('Group.1' = 'BGC'))
-
+           #left_join(colors, by = c('bgc_pred' = 'BGC'))
 
 
 #apply correct projection
 hex <- st_transform(hex_map, 4326)
 
-})
 
 #hex <- ms_simplify(hex)
 
@@ -113,11 +109,19 @@ leaflet() %>%
 )
 
 
+leaflet() %>%
+  addProviderTiles(provider = providers$CartoDB.Positron) %>%
+  addGlPolygons(data = st_cast(hex,"POLYGON"), 
+                fillColor = "Col", 
+                popup = "bgc_pred") %>%
+  setView(lng = -126.5, lat = 54.5, zoom = 5)
+
+
 system.time(
   
   #hex <- st_simplify(hex)
   #try mapview for plotting
-  mapview(hex, zcol = "Group.1", col.regions = colors$Col ,legend = F, alpha = 0.6)
+  mapview(hex, zcol = "Group.1", col.regions = hex$Col ,legend = F, alpha.region = 0.7)
   
 )
 
@@ -134,3 +138,12 @@ mapdeck(token = mapbox_token, style = mapdeck_style("light")) %>%
   
   )
 )
+
+
+
+#use google javascript map API
+library(googleway)
+
+google_map(data = hex, key = Sys.getenv("googleAPI"))%>%
+  add_polygons(fill_colour = "Col")
+

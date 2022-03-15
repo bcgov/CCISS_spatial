@@ -3,6 +3,7 @@
 library(shiny)
 library(shinythemes)
 library(shinyWidgets)
+library(shinycssloaders)
 library(leaflet)
 library(leaflet.extras2)
 #library(leaflet.opacity)
@@ -16,16 +17,28 @@ library(pool)
 library(plotly)
 library(ggplot2)
 library(shinyjs)
+library(raster)
+library(data.table)
 
 
 
 #database connection
 pool <- dbPool(
   drv = RPostgres::Postgres(),
-  #dbname = Sys.getenv("BCGOV_DB"),
-  #host = Sys.getenv("BCGOV_HOST"),
-  dbname = 'postgres',
-  host = Sys.getenv("AWS_HOST"),
+  dbname = Sys.getenv("BCGOV_DB"),
+  host = Sys.getenv("BCGOV_HOST"),
+  #dbname = 'postgres',
+  #host = Sys.getenv("AWS_HOST"),
+  port = 5432, 
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+)
+
+#database for climate variables
+pool2 <- dbPool(
+  drv = RPostgres::Postgres(),
+  dbname = "bgc_climate_data",
+  host = Sys.getenv("BCGOV_HOST"),
   port = 5432, 
   user = Sys.getenv("BCGOV_USR"),
   password = Sys.getenv("BCGOV_PWD")
@@ -34,13 +47,29 @@ pool <- dbPool(
 #load options for selectInput(s)
 gcmOpts <- dbGetQuery(pool, "select gcm from gcm")[,1]
 scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[,1]
-periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[,1]
+#periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[,1]
+periodOpts <- c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
 districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")[,2]
+climvars <- dbGetQuery(pool2, "select distinct climvar from szsum_fut")[,1]
 
 
 #load color scheme for BCG prediction
 bgc_colors <- read.csv('WNA_v12_HexCols.csv')
+subzones <- bgc_colors[bgc_colors$BGC != "(None)",]
 load('Dist_MapBoundaries.Rdata')
+
+#load BC raster layer
+bc_raster <- pgGetRast(dbConnect(
+  drv = RPostgres::Postgres(),
+  dbname = Sys.getenv("BCGOV_DB"),
+  host = Sys.getenv("BCGOV_HOST"),
+  port = 5432, 
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+), name = "bc_raster")
+
+bc_raster <- raster::setValues(bc_raster,NA)
+
 
 
 #load util functions:
@@ -89,3 +118,18 @@ dbGetbgc <- function(con, period, scn, gcm, dist){
   
   st_read(con, query = sql_query)
 }
+
+dbGetbgc_raster <- function(con, period, scn, gcm){
+  
+  sql_query <- paste0("select rast_id, bgc_pred from pts2km_future
+          where futureperiod = '",period, "'
+          and   scenario = '", scn , "'
+          and   gcm = '", gcm, "'
+          ")
+  dat <- dbGetQuery(con, sql_query)
+  
+  setDT(dat)
+  
+  dat
+}
+
