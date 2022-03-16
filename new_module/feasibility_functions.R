@@ -194,6 +194,8 @@ edatopicOverlap <- function(BGC,E1,E1_Phase,onlyRegular = FALSE){
   combAll <- na.omit(combAll)
   combAllSave <- combAll
   
+  gc()
+  
   combAll <- merge(combAll,SSsp.out,
                    by = c("SiteRef","FuturePeriod","BGC","BGC.pred","SS_NoSpace","SS.pred"), all = T)
   temp <- combAll[!is.na(allOverlap.y),]
@@ -227,6 +229,9 @@ edatopicOverlap <- function(BGC,E1,E1_Phase,onlyRegular = FALSE){
   if(onlyRegular){
     return(noPhase)
   }
+  
+  rm(SS.out, SS.out.rev, temp)
+  gc()
   
   ###########################################################################
   ##now redo for phases
