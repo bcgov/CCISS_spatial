@@ -55,8 +55,10 @@ ui <- tagList(
                     ),
                     style = "opacity: 0.65; z-index: 10 !important;"),
                     
-                  leafletOutput(outputId = "map", height = 700) ),
-                    #mainPanel(
+                  leafletOutput(outputId = "map", height = 700),
+                  textOutput("zoomlevel_display")
+                  ),
+                    
                       
                       
                       
@@ -68,7 +70,7 @@ ui <- tagList(
                              
                              conditionalPanel(
                                condition = "input.type == 1",
-                               selectInput("subzone","Select a BGC subzone",choices = subzones)
+                               selectInput("subzone","Select a BGC subzone",choices = subzones$BGC)
                              ),
                              
                              
