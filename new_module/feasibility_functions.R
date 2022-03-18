@@ -1,3 +1,136 @@
+##this is the function we use in the cciss tool. It returns a data.table
+##with proportions for all predicted ecosystem types
+
+dbGetCCISS <- function(con, siteno, avg, modWeights){
+  
+  # Declare binding for checks
+  if (FALSE) {
+    comb <- gcm <- rcp <- weight <- NULL
+  }
+  
+  groupby = "siteno"
+  if (isTRUE(avg)) {
+    groupby = "bgc"
+  }
+  modWeights[,comb := paste0("('",gcm,"','",rcp,"',",weight,")")]
+  weights <- paste(modWeights$comb,collapse = ",")
+  
+  ##cciss_future is now test_future  
+  cciss_sql <- paste0("
+  WITH cciss AS (
+    SELECT cciss_future12_array.siteno,
+         labels.gcm,
+         labels.scenario,
+         labels.futureperiod,
+         bgc_attribution.bgc,
+         bgc.bgc bgc_pred,
+         w.weight
+  FROM cciss_future12_array
+  JOIN bgc_attribution
+    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
+       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
+  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
+               gcm,
+               scenario,
+               futureperiod
+        FROM gcm 
+        CROSS JOIN scenario
+        CROSS JOIN futureperiod) labels
+    ON labels.row_idx = source.row_idx
+    JOIN (values ",weights,") 
+    AS w(gcm,scenario,weight)
+    ON labels.gcm = w.gcm AND labels.scenario = w.scenario
+  JOIN bgc
+    ON bgc.bgc_id = source.bgc_pred_id
+  WHERE cciss_future12_array.siteno IN (", paste(unique(siteno), collapse = ","), ")
+  AND futureperiod IN ('2021','2041','2061','2081')
+  
+  ), cciss_count_den AS (
+  
+    SELECT ", groupby, " siteref,
+           futureperiod,
+           SUM(weight) w
+    FROM cciss
+    GROUP BY ", groupby, ", futureperiod
+  
+  ), cciss_count_num AS (
+  
+    SELECT ", groupby, " siteref,
+           futureperiod,
+           bgc,
+           bgc_pred,
+           SUM(weight) w
+    FROM cciss
+    GROUP BY ", groupby, ", futureperiod, bgc, bgc_pred
+  
+  ), cciss_curr AS (
+      SELECT cciss_prob12.siteno,
+      period,
+      bgc_attribution.bgc,
+      bgc_pred,
+      prob
+      FROM cciss_prob12
+      JOIN bgc_attribution
+      ON (cciss_prob12.siteno = bgc_attribution.siteno)
+      WHERE cciss_prob12.siteno IN (", paste(unique(siteno), collapse = ","), ")
+      
+  ), curr_temp AS (
+    SELECT ", groupby, " siteref,
+           COUNT(distinct siteno) n
+    FROM cciss_curr
+    GROUP BY ", groupby, "
+  )
+  
+  SELECT cast(a.siteref as text) siteref,
+         a.futureperiod,
+         a.bgc,
+         a.bgc_pred,
+         a.w/cast(b.w as float) bgc_prop
+  FROM cciss_count_num a
+  JOIN cciss_count_den b
+    ON a.siteref = b.siteref
+   AND a.futureperiod = b.futureperiod
+   WHERE a.w <> 0
+  
+  UNION ALL
+
+  SELECT cast(", groupby, " as text) siteref,
+          period as futureperiod,
+          bgc,
+          bgc_pred,
+          SUM(prob)/b.n bgc_prop
+  FROM cciss_curr a
+  JOIN curr_temp b
+    ON a.",groupby," = b.siteref
+  WHERE siteno in (", paste(unique(siteno), collapse = ","), ")
+  GROUP BY ", groupby, ",period,b.n, bgc, bgc_pred
+  
+  UNION ALL
+
+  SELECT DISTINCT 
+            cast(", groupby, " as text) siteref,
+            '1961' as futureperiod,
+            bgc,
+            bgc as bgc_pred,
+            cast(1 as numeric) bgc_prop
+    FROM cciss_curr
+    WHERE siteno IN (", paste(unique(siteno), collapse = ","), ")
+  ")
+  
+  dat <- setDT(RPostgres::dbGetQuery(con, cciss_sql))
+  
+  setnames(dat, c("SiteRef","FuturePeriod","BGC","BGC.pred","BGC.prop"))
+  dat <- unique(dat) 
+  #print(dat)
+  return(dat)
+}
+
+
+
+
+
+
+
 #calculate bgc prop from pts2Km_future table (equivalent to dbGetCCISS)
 dbGetCCISS_4km <- function(con, period = "2041-2060", modWeights){
   
