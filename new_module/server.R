@@ -1,9 +1,22 @@
 server <- function(input, output, session) {
   
-  mapInputs <- reactiveValues()
+  #set initial value
+  mapInputs <- reactiveValues(map_zoom_init = 5)
   
   
   observe({
+    req(mapInputs$map_zoom_init)
+    
+    if(mapInputs$map_zoom_init < 11){
+      
+      level <- 1
+    }else{
+      
+      level <- 2
+    }
+    
+    mapInputs$zoomlevel <- level
+    
     
     if(input$dist == "All BC"){
       mapInputs$dist <- districts
@@ -17,7 +30,20 @@ server <- function(input, output, session) {
       mapInputs$scn <- input$col1_scn
       mapInputs$time <- input$time
       
+      #translate futureperiod 
+      mapInputs$bgctime <- switch(input$time, "2001-2020" = "2001",
+                                              "2021-2040" = "2021",
+                                              "2041-2060" = "2041",
+                                              "2061-2080" = "2061",
+                                              "2081-2100" = "2081")
+      
     }
+    
+  })
+  
+  observe({
+    
+    mapInputs$map_zoom_init <- input$map_zoom
     
   })
   
@@ -30,55 +56,138 @@ server <- function(input, output, session) {
     
   })
   
-  mapData <- reactive({
+  mapData <- reactiveValues(mapData = NULL,
+                            mapCol = NULL,
+                            boundingpoly = "")
+  
+  
+  
+  
+  #cache results for raster layer in reactive
+  rasterlayer <- reactive({
     
     withProgress(message = "Retrieving data from database", value = 0, {
     
-    #dat <- dbGetbgc(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm, mapInputs$dist)
-     
-     dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
+    dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
+    
+    
+    incProgress(0.6)
     
     if(nrow(dat)>0) {
-    
-    # dat <- dat %>%
-    #   left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))
-    
-    incProgress(0.6, detail = "Reformating map data")
-    
-    #apply correct projection
-    #dat <- st_transform(dat, crs = 4326)
-    
-    bgcs <- unique(dat$bgc_pred)
-    bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
       
-    dat[subzones,Col := i.Col, on = c(bgc_pred = "BGC")]
-    dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
-    bc_raster <- raster::setValues(bc_raster,NA)
-    bc_raster[dat$rast_id] <- dat$bgcID
-    bc_raster <- ratify(bc_raster)
-    
-    bgcID[subzones,Col := i.Col, on = c(bgc = "BGC")]
-    
+      bgcs <- unique(dat$bgc_pred)
+      bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
       
-    
-    incProgress(0.9)
-    
+      dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
+      dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
+      bc_raster <- raster::setValues(bc_raster,NA)
+      bc_raster[dat$rast_id] <- dat$bgcID
+      bc_raster <- ratify(bc_raster)
+      
+      bgcID[bgc_colors,Col := i.Col, on = c(bgc = "BGC")]
+      
     }else{
       
-    #dat <- data.frame(dist_code = character())
-    bc_raster
+      bc_raster <- bc_raster
+      bgcID <- NULL
+    }
+      
+    })
+    
+    return(list(bc_raster = bc_raster,
+                bgcID = bgcID))
+  })
+  
+  
+
+  
+  observe({
+    
+    req(mapInputs$zoomlevel)
+    
+    withProgress(message = "Retrieving data", value = 0, {
+    
+    #retrieve data based on zoom level, 2Km grid if zoom level below 12, 400m grid if zoom level above 12
+    if(mapInputs$zoomlevel == 1){
+      
+      mapData$mapData <- rasterlayer()$bc_raster
+      mapData$mapCol <- rasterlayer()$bgcID
+     
+      # 
+      # if(nrow(dat)>0) {
+      #   
+      #   bgcs <- unique(dat$bgc_pred)
+      #   bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
+      #   
+      #   dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
+      #   dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
+      #   bc_raster <- raster::setValues(bc_raster,NA)
+      #   bc_raster[dat$rast_id] <- dat$bgcID
+      #   bc_raster <- ratify(bc_raster)
+      #   
+      #   bgcID[bgc_colors,Col := i.Col, on = c(bgc = "BGC")]
+      #   
+      #   mapData$mapData <- bc_raster
+      #   mapData$mapCol <- bgcID
+      #   
+      # }else{
+      #   
+      #   mapData$mapData <- bc_raster
+      #   mapData$mapCol <- ""
+      # }
+      
     }
     
-    #dat
-     
-    list(bc_raster = bc_raster,
-         bgcID = bgcID)
+    
+    if(mapInputs$zoomlevel == 2){
+      
+      bounds <- input$map_bounds
+      latRng <- range(bounds$north, bounds$south)
+      lngRng <- range(bounds$east, bounds$west)
+      
+      poly_df <- data.frame(lon = lngRng, lat = latRng)
+      
+      poly <- st_as_sf(poly_df, coords = c("lon", "lat"), crs = 4326)%>%
+        st_transform(3005)%>%
+        st_bbox() %>% 
+        st_as_sfc()%>%
+        st_as_text()
+      
+      incProgress(0.6, detail= "Retrieving BGC projection")
+      
+      #look up hex_grid table from boundbox:
+      dat <- st_read(pool,query = paste0("select siteno, district, geom from grid_dist where st_intersects(geom, 'SRID=3005;",poly,"');"))
+      
+      
+      
+      if(nrow(dat) > 0){
+      
+      #load BGC projections
+      bcg_predictions <- dbGetCCISSRaw(pool,dat$siteno,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
+        
+      incProgress(0.8)
+      dat <- dat %>%
+             left_join(bcg_predictions[, c('siteno', 'bgc_pred')])%>%
+             left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))%>%
+             st_transform(crs = 4326)
+      
+      }else{
+        
+      dat <- NULL
+      }
+      
+      mapData$mapData <- dat
+      mapData$boundingpoly <- poly
+    }
     
     })
     
   })
   
-  dist_boundary <- reactive({
+  
+  output$zoomlevel_display <- renderText(mapInputs$map_zoom_init)
+  
+  dist_center <- reactive({
     
     if(input$dist == "All BC"){
       
@@ -102,43 +211,56 @@ server <- function(input, output, session) {
   
   
   output$map <- renderLeaflet({
+    
     leaflet() %>%
-      addProviderTiles("CartoDB.Positron", group = "CartoDB.Positron")%>%
-      addProviderTiles("OpenStreetMap.Mapnik", group= "OpenStreetMap")%>%
+      #addProviderTiles("CartoDB.Positron", group = "CartoDB.Positron")%>%
+      #addProviderTiles("OpenStreetMap.Mapnik", group= "OpenStreetMap")%>%
       addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
       addScaleBar(position = "bottomleft") %>%
-      addLayersControl(
-      baseGroups = c("CartoDB.Positron", "OpenStreetMap", "Esri"),
-      options = layersControlOptions(collapsed = TRUE)
-      )%>%
+      setView(lng = -126.5, lat = 54.5, zoom = 5)%>%
+      # addLayersControl(
+      # baseGroups = c("CartoDB.Positron", "OpenStreetMap", "Esri"),
+      # options = layersControlOptions(collapsed = TRUE)
+      # )%>%
       addSpinner()
     
   })
   
   observe({
+    req(mapData$mapData)
+    #req(mapInputs$map_zoom_init)
     
     # validate(
     #   need(nrow(mapData())>0 , "Please select another data set")
     # )
 
+  if(mapInputs$zoomlevel == 2 ){
 
-    # leafletProxy("map", data = mapData()) %>%
-    #   startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
-    #   clearShapes() %>%
-    #   addPolygons(
-    #     fillColor = ~ Col,
-    #     color = ~ Col,
-    #     label = ~ bgc_pred
-    #   )%>%
-    #   stopSpinner()
-    
+    leafletProxy("map", data = mapData$mapData) %>%
+      startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+      clearShapes() %>%
+      clearImages() %>%
+      addPolygons(
+        fillColor = ~ Col,
+        color = ~ Col,
+        label = ~ bgc_pred
+      )%>%
+      stopSpinner()
+
+  }else{
+
     leafletProxy("map") %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearShapes() %>%
-      fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
-      addRasterImage(mapData()$bc_raster, colors = mapData()$bgcID$Col, opacity = 0.8)%>%
+      #fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
+      addRasterImage(mapData$mapData, colors = mapData$mapCol$Col, opacity = 0.8, layerId = "raster")%>%
       stopSpinner()
 
+  }
+
+  
+    
+    
 
   })
   
