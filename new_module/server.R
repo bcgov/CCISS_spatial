@@ -44,6 +44,7 @@ server <- function(input, output, session) {
   observe({
     
     mapInputs$map_zoom_init <- input$map_zoom
+    mapInputs$map_bounds <- input$map_bounds
     
   })
   
@@ -57,16 +58,15 @@ server <- function(input, output, session) {
   })
   
   mapData <- reactiveValues(mapData = NULL,
-                            mapCol = NULL,
-                            boundingpoly = "")
+                            mapCol = NULL)
   
   
   
   
   #cache results for raster layer in reactive
   rasterlayer <- reactive({
-    
-    withProgress(message = "Retrieving data from database", value = 0, {
+
+    withProgress(message = "Retrieving 2Km grid data from database", value = 0, {
     
     dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
     
@@ -99,13 +99,65 @@ server <- function(input, output, session) {
   })
   
   
+  vectorlayer <- reactive({
 
+    
+    withProgress(message = "Retrieving 400m grid data from database", value = 0, {
+    
+    bounds <- mapInputs$map_bounds
+    latRng <- range(bounds$north, bounds$south)
+    lngRng <- range(bounds$east, bounds$west)
+    
+    poly_df <- data.frame(lon = lngRng, lat = latRng)
+    
+    poly <- st_as_sf(poly_df, coords = c("lon", "lat"), crs = 4326)%>%
+      st_transform(3005)%>%
+      st_bbox() %>% 
+      st_as_sfc()%>%
+      st_as_text()
+    
+    incProgress(0.6, detail= "Retrieving BGC projection")
+    
+    #look up hex_grid table from boundbox:
+    dat <- st_read(pool,query = paste0("select siteno,geom from hex_points where st_intersects(geom, 'SRID=3005;",poly,"');"))
+    
+    
+    
+    if(nrow(dat) > 0){
+      
+      incProgress(0.6, detail = "Retrieving BGC projection")
+      
+      #load BGC projections
+      bgc_predictions <- dbGetCCISSRaw(pool,dat$siteno,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
+      
+      incProgress(0.8)
+      # dat <- dat %>%
+      #        left_join(bcg_predictions[, c('siteno', 'bgc_pred')])%>%
+      #        left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))%>%
+      #        st_transform(crs = 4326)
+      
+      #use data table for merge to speed up
+      dat <- setDT(dat)
+      dat <- dat[bgc_predictions, on = "siteno"]
+      dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
+      dat <- st_as_sf(dat)
+      dat <-st_transform(dat, 4326)
+
+      
+    }else{
+      
+      dat <- NULL
+    }
+    
+    return(dat)
+    })
+    
+  })
   
-  observe({
+  
+observe({
     
-    req(mapInputs$zoomlevel)
-    
-    withProgress(message = "Retrieving data", value = 0, {
+   req(mapInputs$zoomlevel)
     
     #retrieve data based on zoom level, 2Km grid if zoom level below 12, 400m grid if zoom level above 12
     if(mapInputs$zoomlevel == 1){
@@ -113,77 +165,16 @@ server <- function(input, output, session) {
       mapData$mapData <- rasterlayer()$bc_raster
       mapData$mapCol <- rasterlayer()$bgcID
      
-      # 
-      # if(nrow(dat)>0) {
-      #   
-      #   bgcs <- unique(dat$bgc_pred)
-      #   bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
-      #   
-      #   dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
-      #   dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
-      #   bc_raster <- raster::setValues(bc_raster,NA)
-      #   bc_raster[dat$rast_id] <- dat$bgcID
-      #   bc_raster <- ratify(bc_raster)
-      #   
-      #   bgcID[bgc_colors,Col := i.Col, on = c(bgc = "BGC")]
-      #   
-      #   mapData$mapData <- bc_raster
-      #   mapData$mapCol <- bgcID
-      #   
-      # }else{
-      #   
-      #   mapData$mapData <- bc_raster
-      #   mapData$mapCol <- ""
-      # }
-      
     }
     
     
     if(mapInputs$zoomlevel == 2){
+    
+      mapData$mapData <- vectorlayer()
       
-      bounds <- input$map_bounds
-      latRng <- range(bounds$north, bounds$south)
-      lngRng <- range(bounds$east, bounds$west)
-      
-      poly_df <- data.frame(lon = lngRng, lat = latRng)
-      
-      poly <- st_as_sf(poly_df, coords = c("lon", "lat"), crs = 4326)%>%
-        st_transform(3005)%>%
-        st_bbox() %>% 
-        st_as_sfc()%>%
-        st_as_text()
-      
-      incProgress(0.6, detail= "Retrieving BGC projection")
-      
-      #look up hex_grid table from boundbox:
-      dat <- st_read(pool,query = paste0("select siteno, district, geom from grid_dist where st_intersects(geom, 'SRID=3005;",poly,"');"))
-      
-      
-      
-      if(nrow(dat) > 0){
-      
-      #load BGC projections
-      bcg_predictions <- dbGetCCISSRaw(pool,dat$siteno,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
-        
-      incProgress(0.8)
-      dat <- dat %>%
-             left_join(bcg_predictions[, c('siteno', 'bgc_pred')])%>%
-             left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))%>%
-             st_transform(crs = 4326)
-      
-      }else{
-        
-      dat <- NULL
-      }
-      
-      mapData$mapData <- dat
-      mapData$boundingpoly <- poly
     }
     
-    })
-    
   })
-  
   
   output$zoomlevel_display <- renderText(mapInputs$map_zoom_init)
   
@@ -212,7 +203,7 @@ server <- function(input, output, session) {
   
   output$map <- renderLeaflet({
     
-    leaflet() %>%
+    leaflet(options = leafletOptions(minZoom = 5, maxZoom = 12)) %>%
       #addProviderTiles("CartoDB.Positron", group = "CartoDB.Positron")%>%
       #addProviderTiles("OpenStreetMap.Mapnik", group= "OpenStreetMap")%>%
       addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
@@ -226,24 +217,21 @@ server <- function(input, output, session) {
     
   })
   
-  observe({
+  
+observe({
     req(mapData$mapData)
     #req(mapInputs$map_zoom_init)
-    
-    # validate(
-    #   need(nrow(mapData())>0 , "Please select another data set")
-    # )
+  
 
   if(mapInputs$zoomlevel == 2 ){
 
     leafletProxy("map", data = mapData$mapData) %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
-      clearShapes() %>%
       clearImages() %>%
-      addPolygons(
-        fillColor = ~ Col,
+      addCircleMarkers(
+        fillOpacity = 0.7,
         color = ~ Col,
-        label = ~ bgc_pred
+        radius = 5
       )%>%
       stopSpinner()
 
@@ -251,7 +239,7 @@ server <- function(input, output, session) {
 
     leafletProxy("map") %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
-      clearShapes() %>%
+      clearMarkers() %>%
       #fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
       addRasterImage(mapData$mapData, colors = mapData$mapCol$Col, opacity = 0.8, layerId = "raster")%>%
       stopSpinner()
