@@ -56,7 +56,7 @@ climvars <- dbGetQuery(pool2, "select distinct climvar from szsum_fut")[,1]
 #load color scheme for BCG prediction
 bgc_colors <- read.csv('WNA_v12_HexCols.csv')
 subzones <- bgc_colors[bgc_colors$BGC != "(None)",]
-load('Dist_MapBoundaries.Rdata')
+#load('Dist_MapBoundaries.Rdata')
 
 #load BC raster layer
 bc_raster <- pgGetRast(dbConnect(
@@ -68,20 +68,24 @@ bc_raster <- pgGetRast(dbConnect(
   password = Sys.getenv("BCGOV_PWD")
 ), name = "bc_raster")
 
+
 bc_raster <- raster::setValues(bc_raster,NA)
 
 
 
 #load util functions:
-dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
+dbGetCCISSRaw2 <- function(con, poly, gcm, scenario, period){
   cciss_sql <- paste0("
     SELECT cciss_future12_array.siteno,
+         hex_points.geom,
          labels.gcm,
          labels.scenario,
          labels.futureperiod,
          bgc_attribution.bgc,
          bgc.bgc bgc_pred
   FROM cciss_future12_array
+  JOIN hex_points
+    ON cciss_future12_array.siteno = hex_points.siteno
   JOIN bgc_attribution
     ON (cciss_future12_array.siteno = bgc_attribution.siteno),
        unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
@@ -95,29 +99,17 @@ dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
     ON labels.row_idx = source.row_idx
   JOIN bgc
     ON bgc.bgc_id = source.bgc_pred_id
-  WHERE cciss_future12_array.siteno IN (", paste(unique(siteno), collapse = ","), ")
+  WHERE st_intersects(geom, 'SRID=3005;",poly,"')
   AND futureperiod IN ('",paste(unique(period), collapse = "','"), "')
   AND scenario IN ('",paste(unique(scenario), collapse = "','"), "')
   AND gcm IN ('",paste(unique(gcm), collapse = "','"), "')
   ")
   
-  dat <- setDT(RPostgres::dbGetQuery(con, cciss_sql))
-  dat <- unique(dat)
+  dat <- setDT(st_read(con, query = cciss_sql))
+  #dat <- unique(dat)
   return(dat)
 }
 
-
-dbGetbgc <- function(con, period, scn, gcm, dist){
-  
-  sql_query <- paste0("select bgc_pred, geom from aggregated_bcg
-          where futureperiod = '",period, "'
-          and   scenario = '", scn , "'
-          and   gcm = '", gcm, "'
-          and dist_code IN ('", paste(unique(dist), collapse = "','"), "')
-          ")
-  
-  st_read(con, query = sql_query)
-}
 
 dbGetbgc_raster <- function(con, period, scn, gcm){
   

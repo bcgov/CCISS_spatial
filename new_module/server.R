@@ -18,11 +18,11 @@ server <- function(input, output, session) {
     mapInputs$zoomlevel <- level
     
     
-    if(input$dist == "All BC"){
-      mapInputs$dist <- districts
-    }else{
-      mapInputs$dist <- input$dist
-    }
+    # if(input$dist == "All BC"){
+    #   mapInputs$dist <- districts
+    # }else{
+    #   mapInputs$dist <- input$dist
+    # }
     
     if(input$type == 1){
       
@@ -119,8 +119,7 @@ server <- function(input, output, session) {
     incProgress(0.6, detail= "Retrieving BGC projection")
     
     #look up hex_grid table from boundbox:
-    dat <- st_read(pool,query = paste0("select siteno,geom from hex_points where st_intersects(geom, 'SRID=3005;",poly,"');"))
-    
+    #dat <- st_read(pool,query = paste0("select siteno,geom from hex_points where st_intersects(geom, 'SRID=3005;",poly,"');"))
     
     
     if(nrow(dat) > 0){
@@ -128,7 +127,7 @@ server <- function(input, output, session) {
       incProgress(0.6, detail = "Retrieving BGC projection")
       
       #load BGC projections
-      bgc_predictions <- dbGetCCISSRaw(pool,dat$siteno,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
+      dat <- dbGetCCISSRaw2(pool,poly ,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
       
       incProgress(0.8)
       # dat <- dat %>%
@@ -137,8 +136,8 @@ server <- function(input, output, session) {
       #        st_transform(crs = 4326)
       
       #use data table for merge to speed up
-      dat <- setDT(dat)
-      dat <- dat[bgc_predictions, on = "siteno"]
+      #dat <- setDT(dat)
+      #dat <- dat[bgc_predictions, on = "siteno"]
       dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
       dat <- st_as_sf(dat)
       dat <-st_transform(dat, 4326)
@@ -178,27 +177,27 @@ observe({
   
   output$zoomlevel_display <- renderText(mapInputs$map_zoom_init)
   
-  dist_center <- reactive({
-    
-    if(input$dist == "All BC"){
-      
-      lng1 <- -140
-      lat1 <- 60
-      lng2 <- -118
-      lat2 <- 47
-      
-    }else{
-      
-      boundary <- unname(dist_bbox$bb[dist_bbox$ORG_UNIT == input$dist][[1]])
-      lng1 <- boundary[1]
-      lat1 <- boundary[2]
-      lng2 <- boundary[3]
-      lat2 <- boundary[4]
-      
-    }
-    
-    list(lng1 = lng1, lat1=lat1, lng2 = lng2, lat2= lat2)
-  })
+  # dist_center <- reactive({
+  #   
+  #   if(input$dist == "All BC"){
+  #     
+  #     lng1 <- -140
+  #     lat1 <- 60
+  #     lng2 <- -118
+  #     lat2 <- 47
+  #     
+  #   }else{
+  #     
+  #     boundary <- unname(dist_bbox$bb[dist_bbox$ORG_UNIT == input$dist][[1]])
+  #     lng1 <- boundary[1]
+  #     lat1 <- boundary[2]
+  #     lng2 <- boundary[3]
+  #     lat2 <- boundary[4]
+  #     
+  #   }
+  #   
+  #   list(lng1 = lng1, lat1=lat1, lng2 = lng2, lat2= lat2)
+  # })
   
   
   output$map <- renderLeaflet({
@@ -228,10 +227,12 @@ observe({
     leafletProxy("map", data = mapData$mapData) %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearImages() %>%
+      clearMarkers() %>%
       addCircleMarkers(
-        fillOpacity = 0.7,
+        fillOpacity = input$opacity,
         color = ~ Col,
-        radius = 5
+        radius = 5,
+        label = ~ bgc_pred
       )%>%
       stopSpinner()
 
@@ -241,16 +242,44 @@ observe({
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearMarkers() %>%
       #fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
-      addRasterImage(mapData$mapData, colors = mapData$mapCol$Col, opacity = 0.8, layerId = "raster")%>%
+      addRasterImage(mapData$mapData, 
+                     colors = mapData$mapCol$Col, 
+                     opacity = input$opacity,
+                     layerId = "raster")%>%
       stopSpinner()
 
   }
 
-  
-    
-    
+})
 
-  })
+
+#Show popup on click
+# observeEvent(input$map_click, {
+# 
+#   if(mapInputs$zoomlevel == 1 ){
+# 
+# 
+#   click <- input$map_click
+#   xy <- SpatialPoints(data.frame(click$lng, click$lat))
+#   proj4string(xy) <- ""
+#   leafletProj <- "+proj=aea +lat_0=45 +lon_0=-126 +lat_1=50 +lat_2=58.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs"
+#   xy <- as.data.frame(spTransform(xy, leafletProj))
+#   #Get the cell number from the newly transformed metric X and Y.
+#   cell <- cellFromXY(depth, c(xy$x, xy$y))
+#   
+#   dat <- mapData$mapData
+#   bgcID <- mapData$mapCol
+#   cellnum <- dat[cellFromXY(dat, matrix(c(click$lng, click$lat), 1))]
+#   bgc.popup <- bgcID$bgc[bgcID$id == values(dat)[cellnum]]
+#   text<-paste0("<strong>", bgc.popup, "</strong>")
+# 
+#   leafletProxy("map") %>%
+#     clearPopups() %>%
+#     addPopups(click$lng, click$lat, text, options = popupOptions(closeButton = FALSE, closeOnClick = TRUE))
+# 
+#   }
+# 
+# })
   
   
   plotData <- reactive({

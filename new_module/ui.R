@@ -7,7 +7,7 @@ ui <- tagList(
   navbarPage(
            
            title = div(img(src="logo.svg"), "The CCISS Tool"),
-           theme = shinytheme("united"),
+           #theme = shinytheme("united"),
           
            tabPanel("App",
                     
@@ -17,18 +17,19 @@ ui <- tagList(
                   absolutePanel(top = 60, left = 5, right = "auto", bottom = "auto",
                                 width = 300, height = "auto",draggable = TRUE,
                     
-                    wellPanel(
-                           selectInput("dist", 
-                                       label = "Select a district",
-                                       choices = c("All BC", districts),
-                                       selected = "All BC"
-                                       ),
+                   wellPanel(
+                    #        selectInput("dist", 
+                    #                    label = "Select a district",
+                    #                    choices = c("All BC", districts),
+                    #                    selected = "All BC"
+                    #                    ),
                            
                            radioButtons("type", inline = FALSE, 
                                         label = "Choose the type of map",
                                         choices = list("Biogeoclimatic units" = 1, "Species feasibility" = 2),
                                         selected = 1),
                            
+                           sliderInput("opacity", label = "Opacity control", min = 0.2, max = 1, value = 0.8),
                            
                            conditionalPanel(
                              condition = "input.type == 1",
