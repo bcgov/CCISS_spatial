@@ -19,8 +19,10 @@ library(ggplot2)
 library(shinyjs)
 library(raster)
 library(data.table)
+library(DT)
+library(RColorBrewer)
 
-
+source("mod_user_upload.R")
 
 #database connection
 pool <- dbPool(
@@ -50,7 +52,7 @@ scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[,1]
 #periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[,1]
 periodOpts <- c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
 districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")[,2]
-climvars <- dbGetQuery(pool2, "select distinct climvar from szsum_fut")[,1]
+climvars <- c("MAT","MAR","MSP","CMD","SHM")
 
 
 #load color scheme for BCG prediction
@@ -123,5 +125,38 @@ dbGetbgc_raster <- function(con, period, scn, gcm){
   setDT(dat)
   
   dat
+}
+
+
+dbGetbgc_count <- function(con, polygon){
+  cciss_sql <- paste0("
+    SELECT count(*) as n,
+         labels.gcm,
+         labels.scenario,
+         labels.futureperiod,
+         bgc.bgc bgc_pred
+  FROM cciss_future12_array
+  JOIN hex_points
+    ON cciss_future12_array.siteno = hex_points.siteno
+  JOIN bgc_attribution
+    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
+       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
+  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
+               gcm,
+               scenario,
+               futureperiod
+        FROM gcm 
+        CROSS JOIN scenario
+        CROSS JOIN futureperiod) labels
+    ON labels.row_idx = source.row_idx
+  JOIN bgc
+    ON bgc.bgc_id = source.bgc_pred_id
+  WHERE st_intersects(hex_points.geom, 'SRID=3005;",polygon,"')
+  GROUP BY labels.gcm,labels.scenario,labels.futureperiod,bgc.bgc
+  ")
+  
+  
+  dat <- setDT(dbGetQuery(con, cciss_sql))
+  return(dat)
 }
 

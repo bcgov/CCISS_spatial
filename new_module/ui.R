@@ -40,7 +40,7 @@ ui <- tagList(
                            
                            conditionalPanel(
                              condition = "input.type == 2",
-                             selectInput("sppPick","Select Tree Species",choices = c("Choose one" = "", "")),
+                             selectInput("sppPick","Select Tree Species",choices = c("Pl","Sx","Fd","Py","Lw","Bl")),
                              selectInput("edaPick","Select Site Position",choices = c("C4","B2","D6"),selected = "C4"),
                              radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change","Loss/Gain"),
                                           selected = "Feasibility")
@@ -57,13 +57,22 @@ ui <- tagList(
                     style = "opacity: 0.65; z-index: 10 !important;"),
                     
                   leafletOutput(outputId = "map", height = 700),
-                  textOutput("zoomlevel_display")
+                  textOutput("zoomlevel_display"),
+                  
+                  DT::dataTableOutput("test_tb")
                   ),
                     
                       
                       
                       
                       column(4, 
+                             
+                             selectInput("subarea", 
+                                         label = "Choose a subregion",
+                                         choices = c("None",districts)),
+                             
+                             uploadFileUI("uploadfile"),
+                             
                              selectInput("var1", 
                                          label = "Choose the x-axis variable",
                                          choices = climvars,
@@ -71,7 +80,7 @@ ui <- tagList(
                              
                              conditionalPanel(
                                condition = "input.type == 1",
-                               selectInput("subzone","Select a BGC subzone",choices = subzones$BGC)
+                               selectizeInput("subzone","Select a BGC subzone",choices = "", multiple = TRUE)
                              ),
                              
                              

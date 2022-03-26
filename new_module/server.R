@@ -39,6 +39,11 @@ server <- function(input, output, session) {
       
     }
     
+    
+    if(input$type ==2){
+      
+    }
+    
   })
   
   observe({
@@ -67,9 +72,10 @@ server <- function(input, output, session) {
   rasterlayer <- reactive({
 
     withProgress(message = "Retrieving 2Km grid data from database", value = 0, {
+      
+    if(input$type == 1){
     
     dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
-    
     
     incProgress(0.6)
     
@@ -91,6 +97,12 @@ server <- function(input, output, session) {
       bc_raster <- bc_raster
       bgcID <- NULL
     }
+    
+    }
+      
+    if(input$type ==2){
+      
+    }
       
     })
     
@@ -103,6 +115,7 @@ server <- function(input, output, session) {
 
     
     withProgress(message = "Retrieving 400m grid data from database", value = 0, {
+      
     
     bounds <- mapInputs$map_bounds
     latRng <- range(bounds$north, bounds$south)
@@ -118,36 +131,36 @@ server <- function(input, output, session) {
     
     incProgress(0.6, detail= "Retrieving BGC projection")
     
-    #look up hex_grid table from boundbox:
-    #dat <- st_read(pool,query = paste0("select siteno,geom from hex_points where st_intersects(geom, 'SRID=3005;",poly,"');"))
-    
-    
-    if(nrow(dat) > 0){
+      
+    if(input$type == 1) {
       
       incProgress(0.6, detail = "Retrieving BGC projection")
       
       #load BGC projections
       dat <- dbGetCCISSRaw2(pool,poly ,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
       
-      incProgress(0.8)
-      # dat <- dat %>%
-      #        left_join(bcg_predictions[, c('siteno', 'bgc_pred')])%>%
-      #        left_join(bgc_colors, by = c('bgc_pred' = 'BGC'))%>%
-      #        st_transform(crs = 4326)
       
-      #use data table for merge to speed up
-      #dat <- setDT(dat)
-      #dat <- dat[bgc_predictions, on = "siteno"]
-      dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
-      dat <- st_as_sf(dat)
-      dat <-st_transform(dat, 4326)
-
+      if(nrow(dat)>0){
+        
+        incProgress(0.8)
+        
+        dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
+        dat <- st_as_sf(dat)
+        dat <-st_transform(dat, 4326)
       
-    }else{
+      }else{
       
       dat <- NULL
+      }
+      
     }
-    
+      
+    if(input$type ==2){
+        
+    }
+
+      
+   
     return(dat)
     })
     
@@ -280,25 +293,96 @@ observe({
 #   }
 # 
 # })
+
+  climateData <- reactive({
+    
+    withProgress(message = "Retrieving climate data from database", value = 0, {
+    
+    if(input$subarea == "None"){
+     climdata <- NULL
+     
+    }else{
+    
+    query <- paste0("
+                    select bgc, value, climvar
+                    from szsum_fut
+                    where period = '",mapInputs$time,
+                    "' and scenario = '",mapInputs$scn,
+                    "' and climvar IN ('MAT','MAR','MSP','CMD','SHM')
+                       and stat = 'mean'")
+    
+    climdata <-dbGetQuery(pool2, query)
+    
+    incProgress(0.8)
+    
+    climdata <- setDT(climdata)
+    }
+      
+    })
+    
+    return(climdata)
+  })
   
   
   plotData <- reactive({
     
-    #retrieve climate variables
-    mtcars
+   if(input$type == 1){
+     
+     if(input$subarea == "None"){
+       dat <- NULL
+       
+     }else if(input$subarea == "User upload"){
+       dat <- user_upload$bgc_area$bgc
+       climdata <- climateData()
+       
+       #filter bgc count by time period and scenario 
+       dat <- dat[futureperiod == mapInputs$bgctime & scenario == mapInputs$scn]
+       
+       #join climvar to bgc count
+       dat <- climdata[dat, on = .(bgc == bgc_pred)]
+       
+     }else{
+       #TODO future implementation of regions and districts
+       dat <- NULL
+     }
+     
+   }
+    
+    
+    
+   return(dat)
+    
+  })
+  
+  observeEvent(plotData(),{
+    
+    subzones <- unique(plotData()$bgc)
+    updateSelectizeInput(session, "subzone", choices = subzones)
   })
   
   output$scatterplot<- renderPlotly({
     
-    p <- ggplot(plotData(), aes(wt, mpg))
-    p <-  p + geom_point()
+    dat <- plotData()
     
-    ggplotly(p)
+    validate(
+      need(nrow(dat)>0, "Please select a region")
+    )
+    
+    #filter data based on x axis selection
+    dat <- dat[climvar == input$var1 & bgc %in% input$subzone]
+    
+    plot_ly(dat, x = ~ value, y = ~ bgc_area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
+            type = "scatter", mode = "markers")%>%
+      layout(xaxis = list(title = input$var1),
+             yaxis = list(title = "Area of biogeoclimatic units (sq km)"),
+             legend = list(title=list(text='<b> GCM </b>')))
     
   })
   
   
   output$climatevarplot <- renderPlotly({
+    
+    climdata <- climateData()
     
     p <- ggplot(mtcars, aes(wt, mpg))
     p <-  p + geom_point()
@@ -306,6 +390,21 @@ observe({
     ggplotly(p)
   })
 
+  user_upload <- callModule(uploadFileServer,"uploadfile")
+  
+  observe({
+    
+    add_choice <- user_upload$filename()
+    updateSelectInput(session, "subarea", choices = c("None",add_choice, districts))
+  })
+  
+  output$test_tb <- DT::renderDT({
+    req(user_upload)
+    
+    df <- user_upload$bgc_area$bgc
+    datatable(
+    df%>%as.data.frame()
+    )
+  })
 
-   
 }
