@@ -302,12 +302,31 @@ observe({
     leafletProxy("map") %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearMarkers() %>%
+      clearControls() %>%
       #fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
       addRasterImage(mapData$mapData, 
                      colors = mapData$mapCol, 
                      opacity = input$opacity,
                      layerId = "raster")%>%
       stopSpinner()
+    
+    if(mapInputs$type == 2){
+      
+      if(mapInputs$feasType == "RawVotes" ) {
+      leafletProxy("map") %>%
+        addLegend(pal = mapData$mapCol, values = c(1:5),
+                  title = "Raw Votes")
+        
+      }else if(mapInputs$feasType == "Feasibility"){
+        leafletProxy("map") %>%
+        addLegend(pal = mapData$mapCol, values = c(1,2,3),
+                  title = "Climatic feasibility", labels = c("Primary", "Secondard", "Tertiary"))
+      }else {
+        leafletProxy("map") %>%
+        addLegend(pal = mapData$mapCol, values = c(-3,-2,-1,0,1,2,3),
+                  title = "Mean change")
+      }
+    }
 
   }
 
@@ -346,11 +365,6 @@ observe({
     
     withProgress(message = "Retrieving climate data from database", value = 0, {
     
-    if(input$subarea == "None"){
-     climdata <- NULL
-     
-    }else{
-    
     query <- paste0("
                     select bgc, value, climvar
                     from szsum_fut
@@ -364,7 +378,6 @@ observe({
     incProgress(0.8)
     
     climdata <- setDT(climdata)
-    }
       
     })
     
@@ -435,10 +448,16 @@ observe({
     
     climdata <- climateData()
     
-    p <- ggplot(mtcars, aes(wt, mpg))
-    p <-  p + geom_point()
+    validate(
+      need(nrow(climdata)>0, "Please select a region")
+    )
     
-    ggplotly(p)
+    xval <- input$var1
+    yval <- input$var2
+    
+    plot_ly(climdata, x = ~ xval, y = ~ yval, type = "scatter", mode = "markers")%>%
+      layout(xaxis = list(title = input$var1),
+             yaxis = list(title = input$var2))
   })
 
   user_upload <- callModule(uploadFileServer,"uploadfile")
@@ -457,5 +476,6 @@ observe({
     df%>%as.data.frame()
     )
   })
+  
 
 }
