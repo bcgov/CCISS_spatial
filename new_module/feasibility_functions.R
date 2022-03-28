@@ -43,7 +43,7 @@ dbGetCCISS <- function(con, siteno, avg, modWeights){
   JOIN bgc
     ON bgc.bgc_id = source.bgc_pred_id
   WHERE cciss_future12_array.siteno IN (", paste(unique(siteno), collapse = ","), ")
-  AND futureperiod IN ('2021','2041','2061','2081')
+  AND futureperiod IN ('2001','2021','2041','2061','2081')
   
   ), cciss_count_den AS (
   
@@ -63,22 +63,6 @@ dbGetCCISS <- function(con, siteno, avg, modWeights){
     FROM cciss
     GROUP BY ", groupby, ", futureperiod, bgc, bgc_pred
   
-  ), cciss_curr AS (
-      SELECT cciss_prob12.siteno,
-      period,
-      bgc_attribution.bgc,
-      bgc_pred,
-      prob
-      FROM cciss_prob12
-      JOIN bgc_attribution
-      ON (cciss_prob12.siteno = bgc_attribution.siteno)
-      WHERE cciss_prob12.siteno IN (", paste(unique(siteno), collapse = ","), ")
-      
-  ), curr_temp AS (
-    SELECT ", groupby, " siteref,
-           COUNT(distinct siteno) n
-    FROM cciss_curr
-    GROUP BY ", groupby, "
   )
   
   SELECT cast(a.siteref as text) siteref,
@@ -91,30 +75,7 @@ dbGetCCISS <- function(con, siteno, avg, modWeights){
     ON a.siteref = b.siteref
    AND a.futureperiod = b.futureperiod
    WHERE a.w <> 0
-  
-  UNION ALL
 
-  SELECT cast(", groupby, " as text) siteref,
-          period as futureperiod,
-          bgc,
-          bgc_pred,
-          SUM(prob)/b.n bgc_prop
-  FROM cciss_curr a
-  JOIN curr_temp b
-    ON a.",groupby," = b.siteref
-  WHERE siteno in (", paste(unique(siteno), collapse = ","), ")
-  GROUP BY ", groupby, ",period,b.n, bgc, bgc_pred
-  
-  UNION ALL
-
-  SELECT DISTINCT 
-            cast(", groupby, " as text) siteref,
-            '1961' as futureperiod,
-            bgc,
-            bgc as bgc_pred,
-            cast(1 as numeric) bgc_prop
-    FROM cciss_curr
-    WHERE siteno IN (", paste(unique(siteno), collapse = ","), ")
   ")
   
   dat <- setDT(RPostgres::dbGetQuery(con, cciss_sql))
