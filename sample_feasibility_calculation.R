@@ -33,13 +33,23 @@ all_weight[gcm_weight,wgcm := i.weight, on = "gcm"]
 all_weight[rcp_weight,wrcp := i.weight, on = "rcp"]
 all_weight[,weight := wgcm*wrcp]
 
+species <- c("PI","Sx","Fd","Py","Lw","BI")
+edatop <- c("B2","C4","E6")
+edatop <- "B2"
+
 
 #retrieve bgc projection and probability
 BGC <- dbGetCCISS_4km(pool, period = "2041-2060", all_weight)
 
+#subset E1 by edatope
+E1 <- E1[is.na(SpecialCode),]
+E1[,HasPos := if(any(Edatopic == edatop)) T else F, by = .(SS_NoSpace)]
+edaZonal <- E1[(HasPos),]
+edaZonal[,HasPos := NULL]
+
 #long process and use up memory
-SSPred <- edatopicOverlap(BGC, E1,E1_Phase,onlyRegular = T)##create site series overlap
+SSPreds <- edatopicOverlap(BGC,edaZonal,E1_Phase,onlyRegular = TRUE) 
 
 ##the "newSuit" column in sppFeas is the predicted feasibility value
 ## for a specific time period that should be shown on the map
-sppFeas <- ccissMap(SSPred,S1, spp_select = "Fd")
+sppFeas <- ccissMap(SSPreds,S1, spp_select = "Fd")
