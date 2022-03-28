@@ -21,6 +21,8 @@ library(raster)
 library(data.table)
 library(DT)
 library(RColorBrewer)
+library(colourvalues)
+
 
 source("mod_user_upload.R")
 
@@ -31,6 +33,18 @@ pool <- dbPool(
   host = Sys.getenv("BCGOV_HOST"),
   #dbname = 'postgres',
   #host = Sys.getenv("AWS_HOST"),
+  port = 5432, 
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+)
+
+
+pool_dev <- dbPool(
+  drv = RPostgres::Postgres(),
+  #dbname = Sys.getenv("BCGOV_DB"),
+  #host = Sys.getenv("BCGOV_HOST"),
+  dbname = 'postgres',
+  host = Sys.getenv("AWS_HOST"),
   port = 5432, 
   user = Sys.getenv("BCGOV_USR"),
   password = Sys.getenv("BCGOV_PWD")
@@ -57,7 +71,7 @@ climvars <- c("MAT","MAR","MSP","CMD","SHM")
 
 #load color scheme for BCG prediction
 bgc_colors <- read.csv('WNA_v12_HexCols.csv')
-subzones <- bgc_colors[bgc_colors$BGC != "(None)",]
+bgc_colors <- bgc_colors%>% filter(BGC!="(None)")
 #load('Dist_MapBoundaries.Rdata')
 
 #load BC raster layer

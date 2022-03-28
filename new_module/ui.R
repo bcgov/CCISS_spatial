@@ -41,8 +41,8 @@ ui <- tagList(
                            conditionalPanel(
                              condition = "input.type == 2",
                              selectInput("sppPick","Select Tree Species",choices = c("Pl","Sx","Fd","Py","Lw","Bl")),
-                             selectInput("edaPick","Select Site Position",choices = c("C4","B2","D6"),selected = "C4"),
-                             radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change","Loss/Gain"),
+                             selectInput("edaPick","Select Site Position",choices = c("B2","C4","E6"),selected = "C4"),
+                             radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change"),
                                           selected = "Feasibility")
                            ),
                            

@@ -16,19 +16,12 @@ server <- function(input, output, session) {
     }
     
     mapInputs$zoomlevel <- level
+    mapInputs$gcm <- input$col1_gcm
+    mapInputs$scn <- input$col1_scn
+    mapInputs$time <- input$time
     
-    
-    # if(input$dist == "All BC"){
-    #   mapInputs$dist <- districts
-    # }else{
-    #   mapInputs$dist <- input$dist
-    # }
     
     if(input$type == 1){
-      
-      mapInputs$gcm <- input$col1_gcm
-      mapInputs$scn <- input$col1_scn
-      mapInputs$time <- input$time
       
       #translate futureperiod 
       mapInputs$bgctime <- switch(input$time, "2001-2020" = "2001",
@@ -40,9 +33,18 @@ server <- function(input, output, session) {
     }
     
     
-    if(input$type ==2){
-      
+    if(input$type == 2){
+      mapInputs$feastime <- switch(input$time, "2001-2020" = 1,
+                                              "2021-2040" = 2,
+                                              "2041-2060" = 3,
+                                              "2061-2080" = 4,
+                                              "2081-2100" = 5)
+      mapInputs$sppPick <- switch(input$sppPick, "Pl" =1, "Sx" =2, "Fd"=3,"Py"=4,"Lw"=5,"Bl"=6)
+      mapInputs$edaPick <- switch(input$edaPick,"B2"=1,"C4"=2,"E6"=3)
+      mapInputs$feasType <- input$feasType
     }
+    
+     mapInputs$type <- input$type
     
   })
   
@@ -72,42 +74,93 @@ server <- function(input, output, session) {
   rasterlayer <- reactive({
 
     withProgress(message = "Retrieving 2Km grid data from database", value = 0, {
-      
-    if(input$type == 1){
     
     dat <- dbGetbgc_raster(pool, mapInputs$time, mapInputs$scn, mapInputs$gcm)
     
-    incProgress(0.6)
+    #reset raster values
+    bc_raster <- raster::setValues(bc_raster,NA)
     
     if(nrow(dat)>0) {
+      
+    if(mapInputs$type == 1){
+    
+    incProgress(0.6)
       
       bgcs <- unique(dat$bgc_pred)
       bgcID <- data.table(bgc = bgcs, id = 1:length(bgcs))
       
-      dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
+      #dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
       dat[bgcID,bgcID := i.id, on = c(bgc_pred = "bgc")]
-      bc_raster <- raster::setValues(bc_raster,NA)
+
       bc_raster[dat$rast_id] <- dat$bgcID
       bc_raster <- ratify(bc_raster)
       
       bgcID[bgc_colors,Col := i.Col, on = c(bgc = "BGC")]
+      pal <- colorFactor(palette = bgcID$Col,bgcID$id, na.color = "transparent" )
+    
+    }
+      
+    if(mapInputs$type == 2){
+      
+      #retrieve species feasibility
+      sppFeas <- dbGetQuery(pool_dev, paste0("select siteno, curr, newsuit from pts2km_feas
+                                              where futureperiod_id = ", mapInputs$feastime,
+                                              "and edatop_id = ", mapInputs$edaPick,
+                                              "and species_id = ", mapInputs$sppPick))%>%
+                 setDT()
+      
+      incProgress(0.6, detail = "Retriving species feasibility results")
+      
+      sppFeas <- dat[sppFeas, on = .(rast_id = siteno)]
+      
+      
+      feas_cols <- data.table(Suit = c(1,2,3),Col = c("#0c8a32","#43a7e0","#db3700"))
+      change_cols <- data.table(Diff = c(-3,-2,-1,0,1,2,3),
+                                Col = c("#ff1900","#ff6633","#f78952","#ffffff","#69cfff","#3b9dff","#002aff"))
+      
+      if(mapInputs$feasType == "RawVotes"){
+        sppFeas[,Col := colour_values(newsuit, palette = "viridis")]
+        
+        bc_raster[sppFeas$rast_id] <- sppFeas$newsuit
+        bc_raster <- ratify(bc_raster)
+        pal <- colorNumeric("viridis",values(bc_raster), na.color = "transparent" )
+        
+      }else if(mapInputs$feasType == "Feasibility"){
+        sppFeas[,newsuit := round(newsuit)]
+        sppFeas <- sppFeas[newsuit < 3.5,]
+        #sppFeas[feas_cols,Col := i.Col, on = c(newsuit = "Suit")]
+        bc_raster[sppFeas$rast_id] <- sppFeas$newsuit
+        bc_raster <- ratify(bc_raster)
+        pal <- colorFactor(c("#0c8a32","#43a7e0","#db3700"),c(1,2,3), na.color = "transparent" )
+        
+      }else if(mapInputs$feasType == "Change"){
+        sppFeas[,newsuit := round(newsuit)]
+        sppFeas <- sppFeas[newsuit < 4.5,]
+        sppFeas[,Diff := curr - newsuit]
+        #sppFeas[change_cols, Col := i.Col, on = "Diff"]
+        
+        bc_raster[sppFeas$rast_id] <- sppFeas$Diff
+        bc_raster <- ratify(bc_raster)
+        pal <- colorFactor(c("#ff1900","#ff6633","#f78952","#ffffff","#69cfff","#3b9dff","#002aff"),
+                           c(-3,-2,-1,0,1,2,3), 
+                           na.color = "transparent" )
+      }
+      
+    }
+      
       
     }else{
       
       bc_raster <- bc_raster
-      bgcID <- NULL
+      bc_raster_cols <- pal
     }
+      
     
-    }
-      
-    if(input$type ==2){
-      
-    }
       
     })
     
     return(list(bc_raster = bc_raster,
-                bgcID = bgcID))
+                bc_raster_cols = pal))
   })
   
   
@@ -132,7 +185,7 @@ server <- function(input, output, session) {
     incProgress(0.6, detail= "Retrieving BGC projection")
     
       
-    if(input$type == 1) {
+    if(mapInputs$type == 1) {
       
       incProgress(0.6, detail = "Retrieving BGC projection")
       
@@ -155,7 +208,7 @@ server <- function(input, output, session) {
       
     }
       
-    if(input$type ==2){
+    if(mapInputs$type ==2){
         
     }
 
@@ -175,7 +228,7 @@ observe({
     if(mapInputs$zoomlevel == 1){
       
       mapData$mapData <- rasterlayer()$bc_raster
-      mapData$mapCol <- rasterlayer()$bgcID
+      mapData$mapCol <- rasterlayer()$bc_raster_cols
      
     }
     
@@ -216,15 +269,10 @@ observe({
   output$map <- renderLeaflet({
     
     leaflet(options = leafletOptions(minZoom = 5, maxZoom = 12)) %>%
-      #addProviderTiles("CartoDB.Positron", group = "CartoDB.Positron")%>%
-      #addProviderTiles("OpenStreetMap.Mapnik", group= "OpenStreetMap")%>%
-      addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
+      addTiles()%>%
+      #addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
       addScaleBar(position = "bottomleft") %>%
       setView(lng = -126.5, lat = 54.5, zoom = 5)%>%
-      # addLayersControl(
-      # baseGroups = c("CartoDB.Positron", "OpenStreetMap", "Esri"),
-      # options = layersControlOptions(collapsed = TRUE)
-      # )%>%
       addSpinner()
     
   })
@@ -256,7 +304,7 @@ observe({
       clearMarkers() %>%
       #fitBounds(lng1 = dist_boundary()$lng1, lat1 = dist_boundary()$lat1,lng2 = dist_boundary()$lng2, lat2 = dist_boundary()$lat2) %>%
       addRasterImage(mapData$mapData, 
-                     colors = mapData$mapCol$Col, 
+                     colors = mapData$mapCol, 
                      opacity = input$opacity,
                      layerId = "raster")%>%
       stopSpinner()
@@ -326,7 +374,7 @@ observe({
   
   plotData <- reactive({
     
-   if(input$type == 1){
+   if(mapInputs$type == 1){
      
      if(input$subarea == "None"){
        dat <- NULL
@@ -348,7 +396,10 @@ observe({
      
    }
     
-    
+  
+  if(mapInputs$type == 2){
+    dat <- NULL
+  }
     
    return(dat)
     
@@ -357,7 +408,7 @@ observe({
   observeEvent(plotData(),{
     
     subzones <- unique(plotData()$bgc)
-    updateSelectizeInput(session, "subzone", choices = subzones)
+    updateSelectizeInput(session, "subzone", choices = subzones, selected = subzones[1])
   })
   
   output$scatterplot<- renderPlotly({
