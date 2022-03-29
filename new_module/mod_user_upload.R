@@ -38,15 +38,40 @@ uploadFileServer <- function(input, output, session) {
         shpName <- shpDF$name[grep(x=shpDF$name, pattern="*.shp")]
         shpPath <- paste(uploadDirectory, shpName, sep="/")
         setwd(prevWD)
-        shpFile <- st_read(shpPath)
+        
+        
+        #add tryCatch error handling
+        upload_shape_file <- function(datapath){
+          
+          events <- function(e) {
+            showModal(
+              modalDialog(
+                title = "Invalid file",
+                paste("Your shape file could not be read, please make sure to upload .shx, .proj, .dbf files together with .shp file. 
+                      Zipped files are not accepted."),
+                easyClose = TRUE
+              )
+            )
+            return(NULL)
+          }
+          
+          shpFile <- tryCatch({ st_read(datapath) }, error = events, warning = events)
+          
+          return(shpFile)
+        }
+        
+        shpFile <- upload_shape_file(shpPath)
+        
         
         return(shpFile)
         })
       
       
-  outputs <- reactiveValues(bgc = NULL)
+  outputs <- reactiveValues(bgc = NULL,
+                            poly_diff = NULL)
       
   observeEvent(userFile(),{
+    
       #add progress bar alert
       progressSweetAlert(
         session = session, id = "myprogress",
@@ -115,7 +140,7 @@ uploadFileServer <- function(input, output, session) {
       
       
       
-      })
+      }, ignoreNULL = TRUE)
       
       return(list(
                   filename = reactive("User upload"),
