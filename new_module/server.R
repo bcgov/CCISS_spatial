@@ -39,8 +39,8 @@ server <- function(input, output, session) {
                                               "2041-2060" = 3,
                                               "2061-2080" = 4,
                                               "2081-2100" = 5)
-      mapInputs$sppPick <- switch(input$sppPick, "Pl" =1, "Sx" =2, "Fd"=3,"Py"=4,"Lw"=5,"Bl"=6)
-      mapInputs$edaPick <- switch(input$edaPick,"B2"=1,"C4"=2,"E6"=3)
+      mapInputs$sppPick <- spp$species_id[spp$species  == input$sppPick]
+      mapInputs$edaPick <- switch(input$edaPick,"B2"=11,"C4"=21,"E6"=39)
       mapInputs$feasType <- input$feasType
     }
     
@@ -105,7 +105,7 @@ server <- function(input, output, session) {
       #retrieve species feasibility
       sppFeas <- dbGetQuery(pool_dev, paste0("select siteno, curr, newsuit from pts2km_feas
                                               where futureperiod_id = ", mapInputs$feastime,
-                                              "and edatop_id = ", mapInputs$edaPick,
+                                              "and edatope_id = ", mapInputs$edaPick,
                                               "and species_id = ", mapInputs$sppPick))%>%
                  setDT()
       
@@ -131,7 +131,7 @@ server <- function(input, output, session) {
         #sppFeas[feas_cols,Col := i.Col, on = c(newsuit = "Suit")]
         bc_raster[sppFeas$rast_id] <- sppFeas$newsuit
         bc_raster <- ratify(bc_raster)
-        pal <- colorFactor(c("#0c8a32","#43a7e0","#db3700"),c(1,2,3), na.color = "transparent" )
+        pal <- colorFactor(c("#0c8a32","#43a7e0","#e8e531"),c(1,2,3), na.color = "transparent" )
         
       }else if(mapInputs$feasType == "Change"){
         sppFeas[,newsuit := round(newsuit)]
@@ -199,7 +199,7 @@ server <- function(input, output, session) {
         
         dat[bgc_colors,Col := i.Col, on = c(bgc_pred = "BGC")]
         dat <- st_as_sf(dat)
-        dat <-st_transform(dat, 4326)
+        dat <- st_transform(dat, 4326)
       
       }else{
       
@@ -241,36 +241,19 @@ observe({
     
   })
   
-  output$zoomlevel_display <- renderText(mapInputs$map_zoom_init)
-  
-  # dist_center <- reactive({
-  #   
-  #   if(input$dist == "All BC"){
-  #     
-  #     lng1 <- -140
-  #     lat1 <- 60
-  #     lng2 <- -118
-  #     lat2 <- 47
-  #     
-  #   }else{
-  #     
-  #     boundary <- unname(dist_bbox$bb[dist_bbox$ORG_UNIT == input$dist][[1]])
-  #     lng1 <- boundary[1]
-  #     lat1 <- boundary[2]
-  #     lng2 <- boundary[3]
-  #     lat2 <- boundary[4]
-  #     
-  #   }
-  #   
-  #   list(lng1 = lng1, lat1=lat1, lng2 = lng2, lat2= lat2)
-  # })
+  output$zoomlevel_display <- renderUI({
+    
+    HTML(paste0("<b>Zoom level: ",mapInputs$map_zoom_init,"</b>",
+         "<p>Data change to 400m grid after zoom level 10</p>"))
+    
+    })
   
   
   output$map <- renderLeaflet({
     
     leaflet(options = leafletOptions(minZoom = 5, maxZoom = 12)) %>%
-      addTiles()%>%
-      #addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
+      #addTiles()%>%
+      addProviderTiles("Esri.WorldStreetMap", group= "Esri")%>%
       addScaleBar(position = "bottomleft") %>%
       setView(lng = -126.5, lat = 54.5, zoom = 5)%>%
       addSpinner()
@@ -320,7 +303,7 @@ observe({
       }else if(mapInputs$feasType == "Feasibility"){
         leafletProxy("map") %>%
         addLegend(pal = mapData$mapCol, values = c(1,2,3),
-                  title = "Climatic feasibility", labels = c("Primary", "Secondard", "Tertiary"))
+                  title = "Climatic feasibility")
       }else {
         leafletProxy("map") %>%
         addLegend(pal = mapData$mapCol, values = c(-3,-2,-1,0,1,2,3),
@@ -365,13 +348,18 @@ observe({
     
     withProgress(message = "Retrieving climate data from database", value = 0, {
     
-    query <- paste0("
-                    select bgc, value, climvar
-                    from szsum_fut
-                    where period = '",mapInputs$time,
-                    "' and scenario = '",mapInputs$scn,
-                    "' and climvar IN ('MAT','MAR','MSP','CMD','SHM')
-                       and stat = 'mean'")
+    query <- paste0("select a.scenario, a.period, a.bgc, a.climvar, max(a.value) as value, b.value as reference
+                 from szsum_fut a
+                 join (select bgc,climvar, value from szsum_curr 
+                       where period = '1961 - 1990'
+                       and stat = 'mean') as b
+                 on a.bgc = b.bgc
+                 and a.climvar = b.climvar
+                 where a.period = '",mapInputs$time,"' 
+                 and a.scenario = '",mapInputs$scn,"' 
+                 and a.climvar IN ('MAT','MAR','MSP','CMD','SHM')
+                 and a.stat = 'mean'
+                 group by a.scenario, a.period, a.bgc, a.climvar,b.value")
     
     climdata <-dbGetQuery(pool2, query)
     
@@ -386,13 +374,16 @@ observe({
   
   
   plotData <- reactive({
+  
+if(input$subarea == "None"){
+      
+  dat <- NULL
     
-   if(mapInputs$type == 1){
+}else {
+      
+  if(mapInputs$type == 1){
      
-     if(input$subarea == "None"){
-       dat <- NULL
-       
-     }else if(input$subarea == "User upload"){
+     if (input$subarea == "User upload"){
        dat <- user_upload$bgc_area$bgc
        climdata <- climateData()
        
@@ -410,9 +401,10 @@ observe({
    }
     
   
-  if(mapInputs$type == 2){
-    dat <- NULL
-  }
+   if(mapInputs$type == 2){
+     dat <- NULL
+   }
+}
     
    return(dat)
     
@@ -452,10 +444,12 @@ observe({
       need(nrow(climdata)>0, "Please select a region")
     )
     
-    xval <- input$var1
-    yval <- input$var2
+    xvar <- climdata[climvar == input$var1]
+    yvar <- climdata[climvar == input$var2]
     
-    plot_ly(climdata, x = ~ xval, y = ~ yval, type = "scatter", mode = "markers")%>%
+    dat <- xvar[yvar, on = 'bgc']
+    
+    plot_ly(dat, x = ~ value, y = ~ i.value, type = "scatter", mode = "markers")%>%
       layout(xaxis = list(title = input$var1),
              yaxis = list(title = input$var2))
   })
