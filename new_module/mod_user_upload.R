@@ -57,6 +57,22 @@ uploadFileServer <- function(input, output, session) {
           
           shpFile <- tryCatch({ st_read(datapath) }, error = events, warning = events)
           
+          area_size <- as.numeric(st_area(shpFile))/1000000
+          
+          if(area_size > 45000){
+            
+            showModal(
+              modalDialog(
+                title = "File too large to process",
+                paste("The polygon from your shape file covers an area larger than 45000 sq km. It is too large to process your data at this moment"),
+                easyClose = TRUE
+              )
+            )
+            return(NULL)
+            
+          }
+          
+          
           return(shpFile)
         }
         
