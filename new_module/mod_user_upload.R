@@ -91,6 +91,19 @@ uploadFileServer <- function(input, output, session) {
       
       
       
+      #calculate invert polygon to gray out
+      poly_diff <-userFile()%>%
+                  st_transform(4326)
+      
+      bounding_box <- st_bbox(c(xmin = -160, xmax = -90, ymax = 70, ymin = 40), crs = st_crs(4326))%>%
+        st_as_sfc()%>%
+        st_as_sf()
+      
+      st_erase = function(x, y) st_difference(x, st_union(st_combine(y)))
+      #inverted polygon
+      poly_diff <- st_erase(bounding_box,poly_diff)
+      
+      outputs$poly_diff <- poly_diff
       
       
       closeSweetAlert(session = session)
@@ -106,6 +119,6 @@ uploadFileServer <- function(input, output, session) {
       
       return(list(
                   filename = reactive("User upload"),
-                  bgc_area = outputs))
+                  outputs = outputs))
       
 }

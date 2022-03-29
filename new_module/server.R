@@ -316,6 +316,43 @@ observe({
 })
 
 
+observeEvent(input$subarea, {
+
+if(input$subarea != "None") {
+  
+  if(input$subarea == "User upload"){
+    poly_diff <- user_upload$outputs$poly_diff
+  }
+  
+  if(input$subarea %in% districts){
+    
+    poly_diff <-bc_districts%>%
+      dplyr::filter(ORG_UNIT == input$subarea)%>%
+      st_transform(4326)
+    
+    bounding_box <- st_bbox(c(xmin = -160, xmax = -90, ymax = 70, ymin = 40), crs = st_crs(4326))%>%
+      st_as_sfc()%>%
+      st_as_sf()
+    
+    st_erase = function(x, y) st_difference(x, st_union(st_combine(y)))
+    #inverted polygon
+    poly_diff <- st_erase(bounding_box,poly_diff)
+    
+  }
+  
+  leafletProxy("map") %>%
+    removeShape(layerId = "masking") %>%
+    addPolygons(data = poly_diff,color = "transparent", fillColor = "#D3D3D3" , fillOpacity = 0.8, layerId = "masking")
+  
+}else{
+  
+  leafletProxy("map") %>%
+    removeShape(layerId = "masking")
+}
+  
+})
+
+
 #Show popup on click
 # observeEvent(input$map_click, {
 # 
@@ -346,6 +383,9 @@ observe({
 
   climateData <- reactive({
     
+    futureperiod <- mapInputs$time
+    scn <- mapInputs$scn
+    
     withProgress(message = "Retrieving climate data from database", value = 0, {
     
     query <- paste0("select a.scenario, a.period, a.bgc, a.climvar, max(a.value) as value, b.value as reference
@@ -355,9 +395,9 @@ observe({
                        and stat = 'mean') as b
                  on a.bgc = b.bgc
                  and a.climvar = b.climvar
-                 where a.period = '",mapInputs$time,"' 
-                 and a.scenario = '",mapInputs$scn,"' 
-                 and a.climvar IN ('MAT','MAR','MSP','CMD','SHM')
+                 where a.period = '",futureperiod,"' 
+                 and a.scenario = '",scn,"' 
+                 and a.climvar IN ('MAT','Tave','MCMT','TD','EMT')
                  and a.stat = 'mean'
                  group by a.scenario, a.period, a.bgc, a.climvar,b.value")
     
@@ -366,6 +406,7 @@ observe({
     incProgress(0.8)
     
     climdata <- setDT(climdata)
+    climdata[, change := value - reference]
       
     })
     
@@ -374,17 +415,17 @@ observe({
   
   
   plotData <- reactive({
-  
-if(input$subarea == "None"){
+
+  if(input$subarea == "None"){
       
   dat <- NULL
     
-}else {
+  }else {
       
   if(mapInputs$type == 1){
      
      if (input$subarea == "User upload"){
-       dat <- user_upload$bgc_area$bgc
+       dat <- user_upload$outputs$bgc
        climdata <- climateData()
        
        #filter bgc count by time period and scenario 
@@ -427,9 +468,9 @@ if(input$subarea == "None"){
     #filter data based on x axis selection
     dat <- dat[climvar == input$var1 & bgc %in% input$subzone]
     
-    plot_ly(dat, x = ~ value, y = ~ bgc_area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
+    plot_ly(dat, x = ~ change, y = ~ bgc_area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
             type = "scatter", mode = "markers")%>%
-      layout(xaxis = list(title = input$var1),
+      layout(xaxis = list(title = paste0("Change in ", input$var1)),
              yaxis = list(title = "Area of biogeoclimatic units (sq km)"),
              legend = list(title=list(text='<b> GCM </b>')))
     
@@ -440,36 +481,34 @@ if(input$subarea == "None"){
     
     climdata <- climateData()
     
-    validate(
-      need(nrow(climdata)>0, "Please select a region")
-    )
-    
     xvar <- climdata[climvar == input$var1]
     yvar <- climdata[climvar == input$var2]
     
     dat <- xvar[yvar, on = 'bgc']
     
-    plot_ly(dat, x = ~ value, y = ~ i.value, type = "scatter", mode = "markers")%>%
-      layout(xaxis = list(title = input$var1),
-             yaxis = list(title = input$var2))
+    plot_ly(dat, x = ~ change, y = ~ i.change, type = "scatter", mode = "markers")%>%
+      layout(xaxis = list(title = paste0("Change in ",input$var1,"\n", climvars_label$Variable[climvars_label$Code == input$var1])),
+             yaxis = list(title = paste0("Change in ",input$var2,"\n", climvars_label$Variable[climvars_label$Code == input$var2])))
   })
+  
+  
 
   user_upload <- callModule(uploadFileServer,"uploadfile")
   
-  observe({
+  observeEvent(user_upload,{
     
     add_choice <- user_upload$filename()
     updateSelectInput(session, "subarea", choices = c("None",add_choice, districts))
   })
   
-  output$test_tb <- DT::renderDT({
-    req(user_upload)
-    
-    df <- user_upload$bgc_area$bgc
-    datatable(
-    df%>%as.data.frame()
-    )
-  })
+  # output$test_tb <- DT::renderDT({
+  #   req(user_upload)
+  #   
+  #   df <- user_upload$outputs$bgc
+  #   datatable(
+  #   df%>%as.data.frame()
+  #   )
+  # })
   
 
 }

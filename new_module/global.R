@@ -22,6 +22,7 @@ library(data.table)
 library(DT)
 library(RColorBrewer)
 library(colourvalues)
+library(bcmaps)
 
 
 source("mod_user_upload.R")
@@ -66,8 +67,13 @@ scenarioOpts <- dbGetQuery(pool, "select scenario from scenario")[,1]
 #periodOpts <- dbGetQuery(pool, "select futureperiod from futureperiod")[,1]
 periodOpts <- c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
 districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")[,2]
-climvars <- c("MAT","MAR","MSP","CMD","SHM")
 
+#TODO expand list of climate variables
+climvars <- c('MAT','Tave','MCMT','TD','EMT')
+climvars_label <- read.csv("Variables_ClimateBC.csv", stringsAsFactors = F)
+
+spp <-c("Py", "Fd", "At", "Ep", "Sx", "Pl", "Sb", "Bl", "Mb", "Dr","Cw", "Bg", "Hw", "Pw", "Ss", "Lw", "Ba", "Yc", "Sxs", "Hm")
+spp <- dbGetQuery(pool_dev, "select * from species")%>%filter(species %in% spp)
 
 #load color scheme for BCG prediction
 bgc_colors <- read.csv('WNA_v12_HexCols.csv')
@@ -86,6 +92,10 @@ bc_raster <- pgGetRast(dbConnect(
 
 
 bc_raster <- raster::setValues(bc_raster,NA)
+
+#load sf for districts
+bc_districts <- nr_districts() %>%
+                dplyr::select(ORG_UNIT, geometry)
 
 
 
