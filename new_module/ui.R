@@ -40,7 +40,7 @@ ui <- tagList(
                            
                            conditionalPanel(
                              condition = "input.type == 2",
-                             selectInput("sppPick","Select Tree Species",choices = c("Pl","Sx","Fd","Py","Lw","Bl")),
+                             selectInput("sppPick","Select Tree Species",choices = spp$species, selected = "Fd"),
                              selectInput("edaPick","Select Site Position",choices = c("B2","C4","E6"),selected = "C4"),
                              radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change"),
                                           selected = "Feasibility")
@@ -57,9 +57,9 @@ ui <- tagList(
                     style = "opacity: 0.65; z-index: 10 !important;"),
                     
                   leafletOutput(outputId = "map", height = 700),
-                  textOutput("zoomlevel_display"),
+                  htmlOutput("zoomlevel_display")
                   
-                  DT::dataTableOutput("test_tb")
+                  #DT::dataTableOutput("test_tb")
                   ),
                     
                       
