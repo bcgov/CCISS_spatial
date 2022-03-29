@@ -57,12 +57,12 @@ server <- function(input, output, session) {
   
   
   #only query climate y axis data when switch is on
-  observeEvent(input$showclimate,{
-    
-    shinyjs::toggle("var2")
-    shinyjs::toggle("climatevarplot")
-    
-  })
+  # observeEvent(input$showclimate,{
+  #   
+  #   shinyjs::toggle("var2")
+  #   shinyjs::toggle("climatevarplot")
+  #   
+  # })
   
   mapData <- reactiveValues(mapData = NULL,
                             mapCol = NULL)
@@ -495,11 +495,12 @@ if(input$subarea != "None") {
 
   user_upload <- callModule(uploadFileServer,"uploadfile")
   
-  observeEvent(user_upload,{
+  observeEvent(user_upload$outputs$bgc,{
     
     add_choice <- user_upload$filename()
     updateSelectInput(session, "subarea", choices = c("None",add_choice, districts))
-  })
+    
+  }, ignoreNULL = TRUE)
   
   # output$test_tb <- DT::renderDT({
   #   req(user_upload)
