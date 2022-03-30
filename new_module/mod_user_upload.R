@@ -121,16 +121,25 @@ uploadFileServer <- function(input, output, session) {
       updateProgressBar(
         session = session,
         id = "myprogress",
-        title = "Calculate species feasibility area... This step might take several minutes",
+        title = "Calculate species feasibility area... This step is computatationally heavy and can take a while",
         value = 40
       )
       
       #calculate species feasibility area
       
+      #retrieve raw BGC projections
+      bgc_raw <- dbGetCCISSRaw3(pool, poly)
       
+      updateProgressBar(
+        session = session,
+        id = "myprogress",
+        title = "Calculate species feasibility area... This step is computatationally heavy and can take a while",
+        value = 70
+      )
       
-      
-      
+      sspFeas <- feasCal(bgc_raw, E1, S1)
+    
+      outputs$sspFeas <- sspFeas
       
       #calculate invert polygon to gray out
       poly_diff <-userFile()%>%
