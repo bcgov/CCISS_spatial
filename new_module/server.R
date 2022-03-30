@@ -397,7 +397,7 @@ if(input$subarea != "None") {
                  and a.climvar = b.climvar
                  where a.period = '",futureperiod,"' 
                  and a.scenario = '",scn,"' 
-                 and a.climvar IN ('MAT','Tave','MCMT','TD','EMT')
+                 and a.climvar IN ('MAT','MCMT','TD','EMT')
                  and a.stat = 'mean'
                  group by a.scenario, a.period, a.bgc, a.climvar,b.value")
     
@@ -418,15 +418,18 @@ if(input$subarea != "None") {
 
   if(input$subarea == "None"){
       
-  dat <- NULL
+     return(NULL)
     
-  }else {
+  }
+    
+  
       
   if(mapInputs$type == 1){
+    
+     climdata <- climateData()
      
      if (input$subarea == "User upload"){
        dat <- user_upload$outputs$bgc
-       climdata <- climateData()
        
        #filter bgc count by time period and scenario 
        dat <- dat[futureperiod == mapInputs$bgctime & scenario == mapInputs$scn]
@@ -438,23 +441,64 @@ if(input$subarea != "None") {
        #TODO future implementation of regions and districts
        dat <- NULL
      }
+    
+    return(dat)
      
    }
     
   
    if(mapInputs$type == 2){
-     dat <- NULL
+     
+     query <- paste0("select a.scenario, a.period, a.bgc, a.climvar, max(a.value) as value, b.value as reference
+                 from szsum_fut a
+                 join (select bgc,climvar, value from szsum_curr 
+                       where period = '1961 - 1990'
+                       and stat = 'mean') as b
+                 on a.bgc = b.bgc
+                 and a.climvar = b.climvar
+                 where a.period = '",mapInputs$time,"' 
+                 and a.climvar IN ('MAT','MCMT','TD','EMT')
+                 and a.stat = 'mean'
+                 group by a.scenario, a.period, a.bgc, a.climvar,b.value")
+     
+     climdata <-setDT(dbGetQuery(pool2, query))
+     
+     incProgress(0.8)
+     
+     climdata <- setDT(climdata)
+     climdata[, change := value - reference]
+     
+     if (input$subarea == "User upload"){
+     
+     dat <- user_upload$outputs$sspFeas
+     
+     #filter data by species, scenario, edatope and time period
+     #TODO time period and edatope selection to be implemented when data pipeline is complete
+     dat <- dat[futureperiod == "2021" & edatope == "B2" &  Spp == input$sppPick]
+     
+     #count grid number by bgc projection
+     dat <- dat[, keyby = .(bgc_pred, gcm, scenario), .N]
+     dat$area <- dat$N * 0.16
+     
+     #join climvar to bgc count
+     dat <- climdata[dat, on = .(bgc == bgc_pred, scenario)]
+     
+     }else{
+       #TODO future implementation of regions and districts
+       dat <- NULL
+     }
+     
+     
+     return(dat)
    }
-}
-    
-   return(dat)
+
     
   })
   
   observeEvent(plotData(),{
     
     subzones <- unique(plotData()$bgc)
-    updateSelectizeInput(session, "subzone", choices = subzones, selected = subzones[1])
+    updateSelectizeInput(session, "subzone", choices = subzones, selected = subzones[grepl("CWH", subzones)])
   })
   
   output$scatterplot<- renderPlotly({
@@ -462,17 +506,44 @@ if(input$subarea != "None") {
     dat <- plotData()
     
     validate(
-      need(nrow(dat)>0, "Please select a region")
+      need(nrow(dat)>0, "No data available to plot")
     )
+    
+    if(mapInputs$type == 1 ){
     
     #filter data based on x axis selection
     dat <- dat[climvar == input$var1 & bgc %in% input$subzone]
+    setkey(dat, change)
     
-    plot_ly(dat, x = ~ change, y = ~ bgc_area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
-            type = "scatter", mode = "markers")%>%
+    p<-plot_ly(dat, x = ~ change, y = ~ bgc_area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
+            type = "scatter", mode = "lines",hoverinfo = "text",
+            text =  ~paste('</br> BGC:', bgc,
+                           '</br>', input$var1, ': ', change,
+                           '</br> Area: ', bgc_area))%>%
       layout(xaxis = list(title = paste0("Change in ", input$var1)),
              yaxis = list(title = "Area of biogeoclimatic units (sq km)"),
              legend = list(title=list(text='<b> GCM </b>')))
+    }
+    
+    if(mapInputs$type == 2){
+      
+      #filter data based on x axis selection
+      dat <- dat[climvar == input$var1]
+      setkey(dat, change)
+      
+      p<-plot_ly(dat, x = ~ change, y = ~ area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
+              type = "scatter", mode = "lines", hoverinfo = "text",
+              text =  ~paste('</br> Scenario: ', scenarioOpts,
+                                   '</br> BGC:', bgc,
+                                   '</br>', input$var1, ': ', change,
+                                   '</br> Area: ', area))%>%
+        layout(xaxis = list(title = paste0("Change in ", input$var1)),
+               yaxis = list(title = "Tree species feasibility area (sq km)"),
+               legend = list(title=list(text='<b> GCM </b>')))
+      
+    }
+    
+    p
     
   })
   
@@ -504,8 +575,9 @@ if(input$subarea != "None") {
   
   # output$test_tb <- DT::renderDT({
   #   req(user_upload)
-  #   
-  #   df <- user_upload$outputs$bgc
+  # 
+  #   #df <- user_upload$outputs$sspFeas[1:10,]
+  #   df <- plotData()
   #   datatable(
   #   df%>%as.data.frame()
   #   )
