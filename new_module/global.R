@@ -26,6 +26,7 @@ library(bcmaps)
 
 
 source("mod_user_upload.R")
+source("utils.R")
 
 #database connection
 pool <- dbPool(
@@ -69,16 +70,20 @@ periodOpts <- c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
 districts <- dbGetQuery(pool, "select distinct district, dist_code from grid_dist")[,2]
 
 #TODO expand list of climate variables
-climvars <- c('MAT','Tave','MCMT','TD','EMT')
-climvars_label <- read.csv("Variables_ClimateBC.csv", stringsAsFactors = F)
+climvars <- c('MAT','MCMT','TD','EMT')
+climvars_label <- read.csv("data/Variables_ClimateBC.csv", stringsAsFactors = F)
 
-spp <-c("Py", "Fd", "At", "Ep", "Sx", "Pl", "Sb", "Bl", "Mb", "Dr","Cw", "Bg", "Hw", "Pw", "Ss", "Lw", "Ba", "Yc", "Sxs", "Hm")
+spp <-c("Bl","Fd","Lw","Pl","Py","Sx")
 spp <- dbGetQuery(pool_dev, "select * from species")%>%filter(species %in% spp)
 
 #load color scheme for BCG prediction
-bgc_colors <- read.csv('WNA_v12_HexCols.csv')
+bgc_colors <- read.csv('data/WNA_v12_HexCols.csv')
 bgc_colors <- bgc_colors%>% filter(BGC!="(None)")
-#load('Dist_MapBoundaries.Rdata')
+
+#load E1, S1 for feasibility
+load("data/E1.rda")
+load("data/S1.rda")
+
 
 #load BC raster layer
 bc_raster <- pgGetRast(dbConnect(
@@ -98,89 +103,4 @@ bc_districts <- nr_districts() %>%
                 dplyr::select(ORG_UNIT, geometry)
 
 
-
-#load util functions:
-dbGetCCISSRaw2 <- function(con, poly, gcm, scenario, period){
-  cciss_sql <- paste0("
-    SELECT cciss_future12_array.siteno,
-         hex_points.geom,
-         labels.gcm,
-         labels.scenario,
-         labels.futureperiod,
-         bgc_attribution.bgc,
-         bgc.bgc bgc_pred
-  FROM cciss_future12_array
-  JOIN hex_points
-    ON cciss_future12_array.siteno = hex_points.siteno
-  JOIN bgc_attribution
-    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
-       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
-  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
-               gcm,
-               scenario,
-               futureperiod
-        FROM gcm 
-        CROSS JOIN scenario
-        CROSS JOIN futureperiod) labels
-    ON labels.row_idx = source.row_idx
-  JOIN bgc
-    ON bgc.bgc_id = source.bgc_pred_id
-  WHERE st_intersects(geom, 'SRID=3005;",poly,"')
-  AND futureperiod IN ('",paste(unique(period), collapse = "','"), "')
-  AND scenario IN ('",paste(unique(scenario), collapse = "','"), "')
-  AND gcm IN ('",paste(unique(gcm), collapse = "','"), "')
-  ")
-  
-  dat <- setDT(st_read(con, query = cciss_sql))
-  #dat <- unique(dat)
-  return(dat)
-}
-
-
-dbGetbgc_raster <- function(con, period, scn, gcm){
-  
-  sql_query <- paste0("select rast_id, bgc_pred from pts2km_future
-          where futureperiod = '",period, "'
-          and   scenario = '", scn , "'
-          and   gcm = '", gcm, "'
-          ")
-  dat <- dbGetQuery(con, sql_query)
-  
-  setDT(dat)
-  
-  dat
-}
-
-
-dbGetbgc_count <- function(con, polygon){
-  cciss_sql <- paste0("
-    SELECT count(*) as n,
-         labels.gcm,
-         labels.scenario,
-         labels.futureperiod,
-         bgc.bgc bgc_pred
-  FROM cciss_future12_array
-  JOIN hex_points
-    ON cciss_future12_array.siteno = hex_points.siteno
-  JOIN bgc_attribution
-    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
-       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
-  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
-               gcm,
-               scenario,
-               futureperiod
-        FROM gcm 
-        CROSS JOIN scenario
-        CROSS JOIN futureperiod) labels
-    ON labels.row_idx = source.row_idx
-  JOIN bgc
-    ON bgc.bgc_id = source.bgc_pred_id
-  WHERE st_intersects(hex_points.geom, 'SRID=3005;",polygon,"')
-  GROUP BY labels.gcm,labels.scenario,labels.futureperiod,bgc.bgc
-  ")
-  
-  
-  dat <- setDT(dbGetQuery(con, cciss_sql))
-  return(dat)
-}
 
