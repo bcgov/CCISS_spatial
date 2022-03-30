@@ -57,9 +57,9 @@ ui <- tagList(
                     style = "opacity: 0.65; z-index: 10 !important;"),
                     
                   leafletOutput(outputId = "map", height = 700),
-                  htmlOutput("zoomlevel_display")
+                  htmlOutput("zoomlevel_display"),
                   
-                  #DT::dataTableOutput("test_tb")
+                  DT::dataTableOutput("test_tb")
                   ),
                     
                       
@@ -87,8 +87,8 @@ ui <- tagList(
                              plotlyOutput("scatterplot")%>%withSpinner(),
                              br(),
                              br(),
-                             switchInput(inputId = "showclimate", value = FALSE, label = "Show scatter plot of climate variables",
-                                         labelWidth = '150px'),
+                             # switchInput(inputId = "showclimate", value = FALSE, label = "Show scatter plot of climate variables",
+                             #             labelWidth = '150px'),
                              br(),
                              
                              tagList(
