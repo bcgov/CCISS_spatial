@@ -1,0 +1,24 @@
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP1_SPLT19;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP1_SPBT19n37;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP1_SPBT38n55;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP1_SPGT55;
+	
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP2_SPLT19;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP2_SPBT19n37;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP2_SPBT38n55;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP2_SPGT55;
+
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP3_SPLT19;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP3_SPBT19n37;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP3_SPBT38n55;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP3_SPGT55;
+
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP4_SPLT19;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP4_SPBT19n37;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP4_SPBT38n55;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP4_SPGT55;
+
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP5_SPLT19;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP5_SPBT19n37;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP5_SPBT38n55;
+DROP INDEX IF EXISTS pts400m_feas__fpspeda_sicurrnews_idx_FP5_SPGT55;
