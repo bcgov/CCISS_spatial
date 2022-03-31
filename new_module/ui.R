@@ -41,7 +41,7 @@ ui <- tagList(
                            conditionalPanel(
                              condition = "input.type == 2",
                              selectInput("sppPick","Select Tree Species",choices = spp$species, selected = "Fd"),
-                             selectInput("edaPick","Select Site Position",choices = c("B2","C4","E6"),selected = "C4"),
+                             selectInput("edaPick","Select Site Position",choices = c("B2","C4","E6"),selected = "E6"),
                              radioButtons("feasType","Select map type", choices = c("Feasibility","RawVotes","Change"),
                                           selected = "Feasibility")
                            ),
@@ -59,7 +59,7 @@ ui <- tagList(
                   leafletOutput(outputId = "map", height = 700),
                   htmlOutput("zoomlevel_display"),
                   
-                  DT::dataTableOutput("test_tb")
+                  #DT::dataTableOutput("test_tb")
                   ),
                     
                       
@@ -73,35 +73,50 @@ ui <- tagList(
                              
                              uploadFileUI("uploadfile"),
                              
-                             selectInput("var1", 
-                                         label = "Choose the x-axis variable",
-                                         choices = climvars,
-                                         selected = "MAT"),
-                             
-                             conditionalPanel(
-                               condition = "input.type == 1",
-                               selectizeInput("subzone","Select a BGC subzone",choices = "", multiple = TRUE)
-                             ),
-                             
-                             
-                             plotlyOutput("scatterplot")%>%withSpinner(),
-                             br(),
-                             br(),
-                             # switchInput(inputId = "showclimate", value = FALSE, label = "Show scatter plot of climate variables",
-                             #             labelWidth = '150px'),
                              br(),
                              
-                             tagList(
-                               selectInput("var2", 
-                                           label = "Choose the y-axis variable",
-                                           choices = climvars,
-                                           selected = "MAT"),
+                             tabsetPanel(
                                
-                               plotlyOutput("climatevarplot")%>%withSpinner()
+                               tabPanel("Graphic summary",
+                                        
+                                        fluidRow(
+                                        column(4,
+                                        selectInput("var1", 
+                                                     label = "Choose the x-axis variable",
+                                                     choices = climvars,
+                                                     selected = "MAT")),
+                                        column(4,
+                                        conditionalPanel(
+                                          condition = "input.type == 1",
+                                          selectizeInput("subzone","Select a BGC subzone",choices = "", multiple = TRUE)
+                                        ))),
+                                        
+                                        plotlyOutput("scatterplot")%>%withSpinner()
+                                        ),
+                               
+                               tabPanel("Climate variables",
+                                        
+                                        fluidRow(
+                                        column(4,
+                                        selectInput("climvar1", 
+                                                    label = "Choose the x-axis variable",
+                                                    choices = climvars,
+                                                    selected = "MAT")),
+                                        column(4,
+                                        selectInput("climvar2", 
+                                                           label = "Choose the y-axis variable",
+                                                           choices = climvars,
+                                                           selected = "MAT"))
+                                        ),
+                                        plotlyOutput("climatevarplot")%>%withSpinner())
                              )
                              
+                             
+                             
+                             
+
                       )
-                    #) 
+                   
             
           
            
