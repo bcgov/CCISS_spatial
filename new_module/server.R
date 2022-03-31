@@ -206,15 +206,60 @@ server <- function(input, output, session) {
       dat <- NULL
       }
       
+      
+      return(list(dat = dat,
+             pal = NULL))
+      
     }
       
     if(mapInputs$type ==2){
+      
+      incProgress(0.6, detail = "Retrieving 400m grid Feasibility results")
+      
+      #load BGC projections
+      dat <- dbGetFeas400m(pool_dev,poly,mapInputs$feastime,mapInputs$sppPick,mapInputs$edaPick)
+      #dat <- setDT(dat)
+      
+      if(nrow(dat)>0){
+        
+        incProgress(0.8)
+        
+        
+        if(mapInputs$feasType == "RawVotes"){
+          
+          pal <- colorNumeric("viridis",domain = dat$newsuit, na.color = "transparent" )
+          
+        }else if(mapInputs$feasType == "Feasibility"){
+          dat[,newsuit := round(newsuit)]
+          dat <- dat[newsuit < 3.5,]
+        
+          pal <- colorFactor(c("#0c8a32","#43a7e0","#e8e531"),c(1,2,3), na.color = "transparent" )
+          
+        }else if(mapInputs$feasType == "Change"){
+          dat[,newsuit := round(newsuit)]
+          dat <- dat[newsuit < 4.5,]
+          dat[,Diff := curr - newsuit]
+          
+          pal <- colorFactor(c("#ff1900","#ff6633","#f78952","#ffffff","#69cfff","#3b9dff","#002aff"),
+                             c(-3,-2,-1,0,1,2,3), 
+                             na.color = "transparent" )
+        }
+        
+        dat <- st_as_sf(dat)
+        dat <- st_transform(dat, 4326)
+        
+      }else{
+        
+        dat <- NULL
+      }
+      
+      return(list(dat = dat,
+             pal = pal))
+      
         
     }
 
-      
-   
-    return(dat)
+    
     })
     
   })
@@ -235,7 +280,8 @@ observe({
     
     if(mapInputs$zoomlevel == 2){
     
-      mapData$mapData <- vectorlayer()
+      mapData$mapData <- vectorlayer()$dat
+      mapData$mapCol <- vectorlayer()$pal
       
     }
     
@@ -267,7 +313,9 @@ observe({
   
 
   if(mapInputs$zoomlevel == 2 ){
-
+    
+    if(mapInputs$type == 1) {
+      
     leafletProxy("map", data = mapData$mapData) %>%
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearImages() %>%
@@ -279,6 +327,64 @@ observe({
         label = ~ bgc_pred
       )%>%
       stopSpinner()
+      
+    }
+    
+    if(mapInputs$type == 2) {
+      
+      pal <- mapData$mapCol
+      
+      if(mapInputs$feasType == "RawVotes" ){
+      
+      leafletProxy("map", data = mapData$mapData) %>%
+        startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+        clearImages() %>%
+        clearMarkers() %>%
+        clearControls() %>%
+        addCircleMarkers(
+          fillOpacity = input$opacity,
+          color = ~ pal(newsuit),
+          radius = 5
+        )%>%
+        stopSpinner()%>%
+        addLegend(pal = pal, values = c(1:5),
+                    title = "Raw Votes")
+        
+      }else if(mapInputs$feasType == "Feasibility"){
+        
+        
+        leafletProxy("map", data = mapData$mapData) %>%
+          startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+          clearImages() %>%
+          clearMarkers() %>%
+          clearControls() %>%
+          addCircleMarkers(
+            fillOpacity = input$opacity,
+            color = ~ pal(newsuit),
+            radius = 5
+          )%>%
+          stopSpinner()%>%
+          addLegend(pal = pal, values = c(1,2,3),
+                    title = "Climatic feasibility")
+      }else {
+        
+        leafletProxy("map", data = mapData$mapData) %>%
+          startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
+          clearImages() %>%
+          clearMarkers() %>%
+          clearControls() %>%
+          addCircleMarkers(
+            fillOpacity = input$opacity,
+            color = ~ pal(Diff),
+            radius = 5
+          )%>%
+          stopSpinner()%>%
+          addLegend(pal = pal, values = c(-3,-2,-1,0,1,2,3),
+                    title = "Mean change")
+      }
+      
+      
+    }
 
   }else{
 
@@ -435,7 +541,7 @@ if(input$subarea != "None") {
        dat <- dat[futureperiod == mapInputs$bgctime & scenario == mapInputs$scn]
        
        #join climvar to bgc count
-       dat <- climdata[dat, on = .(bgc == bgc_pred)]
+       dat <- climdata[dat, on = .(bgc == bgc_pred), allow.cartesian = TRUE]
        
      }else{
        #TODO future implementation of regions and districts
@@ -449,39 +555,22 @@ if(input$subarea != "None") {
   
    if(mapInputs$type == 2){
      
-     query <- paste0("select a.scenario, a.period, a.bgc, a.climvar, max(a.value) as value, b.value as reference
-                 from szsum_fut a
-                 join (select bgc,climvar, value from szsum_curr 
-                       where period = '1961 - 1990'
-                       and stat = 'mean') as b
-                 on a.bgc = b.bgc
-                 and a.climvar = b.climvar
-                 where a.period = '",mapInputs$time,"' 
-                 and a.climvar IN ('MAT','MCMT','TD','EMT')
-                 and a.stat = 'mean'
-                 group by a.scenario, a.period, a.bgc, a.climvar,b.value")
-     
-     climdata <-setDT(dbGetQuery(pool2, query))
-     
      incProgress(0.8)
      
-     climdata <- setDT(climdata)
-     climdata[, change := value - reference]
-     
+     climdata <- climateData()
+  
      if (input$subarea == "User upload"){
      
-     dat <- user_upload$outputs$sspFeas
-     
-     #filter data by species, scenario, edatope and time period
-     #TODO time period and edatope selection to be implemented when data pipeline is complete
-     dat <- dat[futureperiod == "2021" & edatope == "B2" &  Spp == input$sppPick]
-     
-     #count grid number by bgc projection
-     dat <- dat[, keyby = .(bgc_pred, gcm, scenario), .N]
-     dat$area <- dat$N * 0.16
-     
-     #join climvar to bgc count
-     dat <- climdata[dat, on = .(bgc == bgc_pred, scenario)]
+       
+       dat <- user_upload$outputs$sspFeas
+     # 
+     # #filter data by species, scenario, edatope and time period
+     # #TODO time period and edatope selection to be implemented when data pipeline is complete
+     # dat <- dat[futureperiod == mapInputs$bgctime & edatope_id == mapInputs$edaPick &  species_id == mapInputs$sppPick]
+     # 
+     # 
+     # #join climvar to bgc count
+     # dat <- climdata[dat, on = .(bgc == bgc_pred, scenario)]
      
      }else{
        #TODO future implementation of regions and districts
@@ -527,19 +616,21 @@ if(input$subarea != "None") {
     
     if(mapInputs$type == 2){
       
-      #filter data based on x axis selection
-      dat <- dat[climvar == input$var1]
-      setkey(dat, change)
+      p <- plot_ly(dat, x = ~ mpg, y = ~cyl, type = "scatter")
       
-      p<-plot_ly(dat, x = ~ change, y = ~ area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
-              type = "scatter", mode = "lines", hoverinfo = "text",
-              text =  ~paste('</br> Scenario: ', scenarioOpts,
-                                   '</br> BGC:', bgc,
-                                   '</br>', input$var1, ': ', change,
-                                   '</br> Area: ', area))%>%
-        layout(xaxis = list(title = paste0("Change in ", input$var1)),
-               yaxis = list(title = "Tree species feasibility area (sq km)"),
-               legend = list(title=list(text='<b> GCM </b>')))
+      #filter data based on x axis selection
+      # dat <- dat[climvar == input$var1]
+      # setkey(dat, change)
+      # 
+      # p<-plot_ly(dat, x = ~ change, y = ~ area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
+      #         type = "scatter", mode = "lines", hoverinfo = "text",
+      #         text =  ~paste('</br> Scenario: ', scenarioOpts,
+      #                              '</br> BGC:', bgc,
+      #                              '</br>', input$var1, ': ', change,
+      #                              '</br> Area: ', area))%>%
+      #   layout(xaxis = list(title = paste0("Change in ", input$var1)),
+      #          yaxis = list(title = "Tree species feasibility area (sq km)"),
+      #          legend = list(title=list(text='<b> GCM </b>')))
       
     }
     
@@ -552,8 +643,8 @@ if(input$subarea != "None") {
     
     climdata <- climateData()
     
-    xvar <- climdata[climvar == input$var1]
-    yvar <- climdata[climvar == input$var2]
+    xvar <- climdata[climvar == input$climvar1]
+    yvar <- climdata[climvar == input$climvar2]
     
     dat <- xvar[yvar, on = 'bgc']
     
