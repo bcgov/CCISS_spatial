@@ -108,6 +108,6 @@ ui <- tagList(
                     includeMarkdown("about.Rmd")
            ),
            tabPanel("Model Info",
-                    verbatimTextOutput("summary")
+                    DT::dataTableOutput("table")
            )
 ))
