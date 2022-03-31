@@ -56,27 +56,30 @@ uploadFileServer <- function(input, output, session) {
           }
           
           shpFile <- tryCatch({ st_read(datapath) }, error = events, warning = events)
-          
-          area_size <- as.numeric(st_area(shpFile))/1000000
-          
-          if(area_size > 45000){
-            
-            showModal(
-              modalDialog(
-                title = "File too large to process",
-                paste("The polygon from your shape file covers an area larger than 45000 sq km. It is too large to process your data at this moment"),
-                easyClose = TRUE
-              )
-            )
-            return(NULL)
-            
-          }
-          
+  
           
           return(shpFile)
         }
         
         shpFile <- upload_shape_file(shpPath)
+        
+        
+        #TODO: control area size of user upload
+        #area_size <- as.numeric(st_area(shpFile))/1000000
+        
+        # if(area_size > 45000){
+        #   
+        #   showModal(
+        #     modalDialog(
+        #       title = "File too large to process",
+        #       paste("The polygon from your shape file covers an area larger than 45000 sq km. It is too large to process your data at this moment"),
+        #       easyClose = TRUE
+        #     )
+        #   )
+        #   return(NULL)
+        #   
+        # }
+        # 
         
         
         return(shpFile)
@@ -128,7 +131,7 @@ uploadFileServer <- function(input, output, session) {
       #calculate species feasibility area
       
       #retrieve raw BGC projections
-      bgc_raw <- dbGetCCISSRaw3(pool, poly)
+      #bgc_feas <- dbGetCCISSRaw3(pool_dev, poly)
       
       updateProgressBar(
         session = session,
@@ -137,8 +140,38 @@ uploadFileServer <- function(input, output, session) {
         value = 70
       )
       
-      sspFeas <- feasCal(bgc_raw, E1, S1)
+      #retrieve feasibility score from user upload for all time period(2001=1, 2021=2, 2041=3, 2061=4, 2081=5), 
+      #species (Bl = 10, Fd =18, Lw = 30, Pl = 50,Py = 54, Sx = 69)
+      #edatopes(B2 =11, C4 =21, E6 =39) and 
+      
+      
+      cciss_sql <- paste0("
+    SELECT a.siteno,
+           a.curr,
+           a.newsuit,
+           a.futureperiod_id,
+           a.species_id,
+           a.edatope_id
+    FROM pts400m_feas a
+    JOIN hex_points b
+    ON a.siteno = b.siteno
+    WHERE st_intersects(b.geom, 'SRID=3005;",poly,"')
+    ")
+      
+      RPostgres::dbExecute(pool_dev,  "set enable_seqscan = off")
+      sspFeas <- setDT(dbGetQuery(pool_dev,cciss_sql))
+      
+      RPostgres::dbExecute(pool_dev,  "set enable_seqscan = on")
     
+      
+      #filter out newsuit > 3
+      sspFeas <- sspFeas[newsuit <= 3]
+      
+      
+      #count number of grid by futureperiod, species_id, edatope_id
+      sspFeas <- sspFeas[, keyby = .(futureperiod_id, species_id, edatope_id), .N]
+      sspFeas$area <- sspFeas$N * 0.16
+      
       outputs$sspFeas <- sspFeas
       
       #calculate invert polygon to gray out
