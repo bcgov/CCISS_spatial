@@ -1,0 +1,179 @@
+#################################################################################################
+#################################################################################################
+##
+##    CCISS_spatial NEW MODULE Database Deployment Runbook
+##
+##    Updated March 31, 2022
+##    Author: Tim McKay, Geek Inc.
+##
+##    Purpose:
+##		This document describese the manual steps required to upgrade the CCISS Postgres 
+##		database to work with the new CCISS Shiny R web application.
+##
+##
+#################################################################################################
+#################################################################################################
+
+OVERVIEW
+
+The CCISS Shiny R web application comprises several R scripts that query the CCISS Postgres database.
+
+In order to render the web application in a timely fashion, new database relations (a.k.a. "tables")  
+are needed to support this.
+
+This document describes the steps to create those new structures, populate them initially, and to
+index them for performance.
+
+ASSETS
+
+The scripts referred to here can be obtained from the project Github repo.  The assets for this purpose
+are located at the following URL : https://github.com/bcgov/CCISS_spatial/blob/module_dev/
+
+There are SQL scripts and R scripts required to build the structures.
+
+That folder has a sub-folder "database" where the SQL scripts for this purpose are stored.
+
+In some of the following points we are referencing some timings.  Those timings are based on RStudio 
+running on the following system:
+	Windows Server 2016 virtual machine
+	10 virtual cores
+	72 GB RAM
+This was running against an AWS hosted Postgres database with 2TB storage and 16GB RAM.
+
+The .SQL scripts referenced below should be run through PGadmin, or another method that will 
+read these files in full and execute them against the CCISS production database.
+
+1)  CCISS_spatial_ShinyApp_Install.sql
+
+	This script will drop and create empty relations that are required for the Web App.
+	
+2)  CCISS_spatial_feasibility_general_indexes_required.SQL (required)
+
+	This script reconstructs a few pre-existing SQL indexes that our develoment team determined were 
+	helpful to enhance query performance during the project.  Specifically, some of the PostGIS
+	geometry indexes needed to be rebuilt.
+	
+	Our advise would be to deem these indexes as required.  With consultation with
+	a Database Administrator (DBA) conversant with Postgres, some or all of these indexes could
+	be of utility for performance purposes.
+	
+	Executing these in full will likely run for more than 15 minutes but less than an hour.
+	
+3)  CCISS_spatial_feasibility_general_indexes_optional.SQL (optional)
+
+	This script installs numerous SQL indexes that our develoment team determined were helpful
+	to enhance query performance during the project.
+	
+	Because the project team was leveraging the CCISS database outside of the normal production 
+	enviornment and with few users it is hard to know which of these would produce a direct 
+	positive impact of performance of the Shiny Web app, nor which of these indexes may 
+	reduce performance in a full production environment, or further enhance or reduce performance
+	of other applications or use cases of the CCISS production environment.
+	
+	Our advise would be to deem these indexes as optional to begin with.  With consultation with
+	a Database Administrator (DBA) conversant with Postgres, some or all of these indexes could
+	be of utility for performance purposes.
+	
+	Executing these in full will likely run for more than an hour and directly impact the storage
+	footprint of the database as a result of the new indexes.
+
+4)	CCISS_spatial_feasibility_build_reference_tables.R
+
+	In order to build performance efficiencies with the new strucutres, two new relations are
+	added to the database: species and edatopes
+	
+	The purpose of those is to have smallint data type IDs instead of text types for query 
+	predicates.  This enables improved performance by leveraging the B-Tree indexing of 
+	Postgres.
+	
+	This script is dependant on the S1.rda (Species) and E1.rda (Edatope) RData files.
+	
+	NOTE: If and when either of those files are updated, this script needs to be re-executed.  
+	
+	WARNING: Any time this script is re-executed, the IDs will change and as a result all the dependent 
+	tables need to also be re-run or the related information will be wrong.
+	
+5)  CCISS_spatial_feasibility_calculation_2km_drop_indexes.SQL
+
+	This script drops all the indexes of the "pts2km_feas" relation.
+	
+	Run this script prior to running the CCISS_spatial_feasibility_calculation_2km.R script to 
+	make that script run faster.  
+
+6)  CCISS_spatial_feasibility_calculation_2km.R
+
+	This script will PURGE and rebuild the "pts2km_feas" relation for the web app.
+	
+	Currently, as per the project requirements, the scope of execution is limited by parameters to 
+	reduce the storage footprint and generation computation.
+	
+	Changes to these parameters will dramatically affect the final storage required by the 
+	database for the database and indexes.  Search the script for these parameters:
+	
+	a)  futureperiod_param - relates to the fp_full field of the "futureperiod" relation.
+	b)  species_param - relates to the text species (eg. "Pl") in the "species" relation.
+	c)  edatope_param - relates to the text edatope (eg. "E6") in the "edatope" relation.
+	
+	The script is designed to PURGE the entire table first.  Then rebuild the entire scope.  It is 
+	not programmed to make "incremental" updates or re-syncing subsets of source data.
+	
+	This script is dependent on the "species" and "edatope" relations from the 
+	CCISS_spatial_feasibility_build_reference_tables.R script.
+	
+	It is also dependent on these previously existing relations:
+		pts2km_future
+		
+	If any of those tables are modified or rebuilt, this script needs to be re-run.
+	
+	On the development systems with the current params, this script takes approximately 30 minutes.
+	With indexing, this table occupies 1.1 GB of storage.
+	
+7)  CCISS_spatial_feasibility_calculation_2km_create_indexes.SQL
+
+	Run this script after the CCISS_spatial_feasibility_calculation_2km.R to index the "pts2km_feas"
+	relation.
+
+8)  CCISS_spatial_feasibility_calculation_400m_drop_indexes.SQL
+
+	This script drops all the indexes of the "pts400m_feas" relation.
+	
+	Run this script prior to running the CCISS_spatial_feasibility_calculation_400m.R script to 
+	make that script run faster (order of magnitude).
+
+9)  CCISS_spatial_feasibility_calculation_400m.R
+
+	This script will PURGE and rebuild the "pts400m_feas" relation for the web app.
+	
+	Currently, as per the project requirements, the scope of execution is limited by parameters to 
+	reduce the storage footprint and generation computation.
+	
+	Changes to these parameters will dramatically affect the final storage required by the 
+	database for the database and indexes.  Search the script for these parameters:
+	
+	a)  futureperiod_param - relates to the fp_full field of the "futureperiod" relation.
+	b)  species_param - relates to the text species (eg. "Pl") in the "species" relation.
+	c)  edatope_param - relates to the text edatope (eg. "E6") in the "edatope" relation.
+	
+	The script is designed to PURGE everything first.  Then rebuild the entire scope.  It is 
+	not programmed to make "incremental" updates or re-syncing subsets of source data.
+	
+	This script is dependent on the "species" and "edatope" relations from the 
+	CCISS_spatial_feasibility_build_reference_tables.R script.
+	
+	It is also dependent on these previously existing relations:
+		cciss_future12_array
+		bgc
+		bgc_attribution
+		gcm
+		scenario
+		futureperiod
+		
+	If any of those tables are modified or rebuilt, this script needs to be re-run.
+	
+	On the development systems with the current params, this script takes approximately 12 HOURS.
+	With indexing, this table occupies 33 GB of storage.
+	
+10)  CCISS_spatial_feasibility_calculation_400m_create_indexes.SQL
+
+	Run this script after the CCISS_spatial_feasibility_calculation_400m.R to index the "pts400m_feas"
+	relation.

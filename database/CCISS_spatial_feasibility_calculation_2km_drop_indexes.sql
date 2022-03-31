@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS pts2km_feas__fpspeda_sicurrnews_idx;
