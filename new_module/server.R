@@ -172,13 +172,11 @@ server <- function(input, output, session) {
       st_as_sfc()%>%
       st_as_text()
     
-    incProgress(0.6, detail= "Retrieving BGC projection")
     
       
     if(mapInputs$type == 1) {
       
-      incProgress(0.6, detail = "Retrieving BGC projection")
-      
+      incProgress(0.6, detail= "Retrieving 400m grid BGC projection")
       #load BGC projections
       dat <- dbGetCCISSRaw2(pool,poly ,mapInputs$gcm,mapInputs$scn,mapInputs$bgctime)
       
@@ -201,11 +199,13 @@ server <- function(input, output, session) {
              pal = NULL))
       
     }
-      
+    
+    
+    
+    
     if(mapInputs$type ==2){
       
       incProgress(0.6, detail = "Retrieving 400m grid Feasibility results")
-      
       #load BGC projections
       dat <- dbGetFeas400m(pool_dev,poly,mapInputs$feastime,mapInputs$sppPick,mapInputs$edaPick)
       #dat <- setDT(dat)
@@ -310,6 +310,7 @@ server <- function(input, output, session) {
       startSpinner(list("lines" = 7, "length" = 40, "width" = 20, "radius" = 5)) %>%
       clearImages() %>%
       clearMarkers() %>%
+      clearControls() %>%
       addCircleMarkers(
         fillOpacity = input$opacity,
         color = ~ Col,
@@ -522,9 +523,7 @@ server <- function(input, output, session) {
   plotData <- reactive({
 
   if(input$subarea == "None"){
-      
      return(NULL)
-    
   }
     
   
@@ -546,41 +545,36 @@ server <- function(input, output, session) {
        #TODO future implementation of regions and districts
        dat <- NULL
      }
-    
-    return(dat)
      
-   }
-    
-  
-   if(mapInputs$type == 2){
-     
-     incProgress(0.8)
+     return(dat)
+  }
+       
+  if(mapInputs$type == 2){
      
      climdata <- climateData()
   
      if (input$subarea == "User upload"){
+     dat <- user_upload$outputs$sspFeas
+
+     #filter data by species_id, edatope_id and time period
+     dat <- dat[futureperiod_id == mapInputs$feastime & edatope_id == mapInputs$edaPick &  species_id == mapInputs$sppPick]
+
+     dat[, futureperiod := fcase(futureperiod_id == 1 , "2001-2020",
+                                 futureperiod_id == 2, "2021-2040",
+                                 futureperiod_id == 3, "2041-2060",
+                                 futureperiod_id == 4, "2061-2080",
+                                 futureperiod_id == 5, "2081-2100")]
      
-       
-       dat <- user_upload$outputs$sspFeas
-     # 
-     # #filter data by species, scenario, edatope and time period
-     # #TODO time period and edatope selection to be implemented when data pipeline is complete
-     # dat <- dat[futureperiod == mapInputs$bgctime & edatope_id == mapInputs$edaPick &  species_id == mapInputs$sppPick]
-     # 
-     # 
-     # #join climvar to bgc count
-     # dat <- climdata[dat, on = .(bgc == bgc_pred, scenario)]
+     #TODO link feasibility area data to climate data correctly
+     dat <- climdata[dat, on = .(period = futureperiod), allow.cartesian = TRUE]
      
      }else{
        #TODO future implementation of regions and districts
        dat <- NULL
      }
-     
-     
      return(dat)
    }
 
-    
   })
 
   #update selectizeInput choices for BGC subzone selection for BGC area plot
@@ -619,22 +613,18 @@ server <- function(input, output, session) {
     
     if(mapInputs$type == 2){
       
-      p <- plot_ly(dat, x = ~ mpg, y = ~cyl, type = "scatter")
-      
+    
       #filter data based on x axis selection
-      # dat <- dat[climvar == input$var1]
-      # setkey(dat, change)
-      # 
-      # p<-plot_ly(dat, x = ~ change, y = ~ area, color = ~ gcm,colors = colorRampPalette(brewer.pal(8, "Spectral"))(13),
-      #         type = "scatter", mode = "lines", hoverinfo = "text",
-      #         text =  ~paste('</br> Scenario: ', scenarioOpts,
-      #                              '</br> BGC:', bgc,
-      #                              '</br>', input$var1, ': ', change,
-      #                              '</br> Area: ', area))%>%
-      #   layout(xaxis = list(title = paste0("Change in ", input$var1)),
-      #          yaxis = list(title = "Tree species feasibility area (sq km)"),
-      #          legend = list(title=list(text='<b> GCM </b>')))
-      
+      dat <- dat[climvar == input$var1]
+      setkey(dat, change)
+
+      p<-plot_ly(dat, x = ~ change, y = ~ area,
+              type = "scatter", mode = "lines", hoverinfo = "text",
+              text =  ~paste('</br>', input$var1, ': ', change,
+                             '</br> Area: ', area))%>%
+        layout(xaxis = list(title = paste0("Change in ", input$var1)),
+               yaxis = list(title = "Tree species feasibility area (sq km)"))
+
     }
     
     p
@@ -668,6 +658,15 @@ server <- function(input, output, session) {
     
   }, ignoreNULL = TRUE)
   
+  
+  output$table <- DT::renderDataTable({
+    DT::datatable(modelMetadata, 
+                  options = list(pageLength = dim(modelMetadata)[1]), 
+                  rownames= FALSE, 
+                  caption = 'Model Metadata. Global model statistics are quoted from Forster et al. (2013, Journal of Geophysical Research): TCR is transient climate response (temperature change in response to a 1%/yr increase in CO2 at time, at point of doubling CO2), ECS is equilibrium climate sensitivity (temperature change in response to an instant doubling of CO2), and deltaT is global mean surface temperature change since preindustrial for RCP4.5 in the 2090s. All values are in degrees Celsius.'
+    )
+  })
+  
   #test output from call module
   # output$test_tb <- DT::renderDT({
   #   req(user_upload)
@@ -678,6 +677,6 @@ server <- function(input, output, session) {
   #   df%>%as.data.frame()
   #   )
   # })
-  
-
+  # 
+ 
 }
