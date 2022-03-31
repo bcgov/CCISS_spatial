@@ -1,5 +1,45 @@
 #functions used in the app
 
+##function to return raw predictions for specified parameters
+#' @param con database connection
+#' @param siteno site number
+#' @param gcm GCM model
+#' @param scenario Scenario
+#' @param period Future time period
+
+dbGetCCISSRaw <- function(con, siteno, gcm, scenario, period){
+  cciss_sql <- paste0("
+    SELECT cciss_future12_array.siteno,
+         labels.gcm,
+         labels.scenario,
+         labels.futureperiod,
+         bgc_attribution.bgc,
+         bgc.bgc bgc_pred
+  FROM cciss_future12_array
+  JOIN bgc_attribution
+    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
+       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
+  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
+               gcm,
+               scenario,
+               futureperiod
+        FROM gcm 
+        CROSS JOIN scenario
+        CROSS JOIN futureperiod) labels
+    ON labels.row_idx = source.row_idx
+  JOIN bgc
+    ON bgc.bgc_id = source.bgc_pred_id
+  WHERE cciss_future12_array.siteno IN (", paste(unique(siteno), collapse = ","), ")
+  AND futureperiod IN ('",paste(unique(period), collapse = "','"), "')
+  AND scenario IN ('",paste(unique(scenario), collapse = "','"), "')
+  AND gcm IN ('",paste(unique(gcm), collapse = "','"), "')
+  ")
+  
+  dat <- setDT(RPostgres::dbGetQuery(con, cciss_sql))
+  dat <- unique(dat)
+  return(dat)
+}
+
 #' function to retrieve raw BGC projection in 400m grid by user provided polygon
 #' function derived from dbGetCCISSRaw
 #' @param con database connection
@@ -60,7 +100,10 @@ dbGetFeas400m <- function(con, poly, period, spp, edatope){
   cciss_sql <- paste0("
     SELECT b.geom,
            a.curr,
-           a.newsuit
+           a.newsuit,
+           a.futureperiod_id,
+           a.species_id,
+           a.edatope_id
   FROM pts400m_feas a
   JOIN hex_points b
   ON a.siteno = b.siteno
@@ -135,47 +178,7 @@ dbGetbgc_count <- function(con, polygon){
   return(dat)
 }
 
-#' function to retrieve raw BGC projection in 400m grid by user provided polygon
-#' function derived from dbGetCCISSRaw
-#' @param con database connection
-#' @param poly polygon geometry in string from st_as_text()
 
-
-dbGetCCISSRaw3 <- function(con, poly){
-  cciss_sql <- paste0("
-    SELECT cciss_future12_array.siteno,
-         labels.gcm,
-         labels.scenario,
-         labels.futureperiod,
-         bgc_attribution.bgc,
-         bgc.bgc bgc_pred,
-         pts400m_feas.species_id,
-         pts400m_feas.edatope_id
-  FROM cciss_future12_array
-  JOIN hex_points
-    ON cciss_future12_array.siteno = hex_points.siteno
-  JOIN pts400m_feas
-    ON cciss_future12_array.siteno = pts400m_feas.siteno
-  JOIN bgc_attribution
-    ON (cciss_future12_array.siteno = bgc_attribution.siteno),
-       unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
-  JOIN (SELECT ROW_NUMBER() OVER(ORDER BY gcm_id, scenario_id, futureperiod_id) row_idx,
-               gcm,
-               scenario,
-               futureperiod
-        FROM gcm 
-        CROSS JOIN scenario
-        CROSS JOIN futureperiod) labels
-    ON labels.row_idx = source.row_idx
-  JOIN bgc
-    ON bgc.bgc_id = source.bgc_pred_id
-  WHERE st_intersects(geom, 'SRID=3005;",poly,"')
-  ")
-  
-  dat <- setDT(dbGetQuery(con, cciss_sql))
-  dat <- unique(dat)
-  return(dat)
-}
 
 #' function to retrieve species feasibility, used for graphic summary 
 #' @param bgc BGC projection output from dbGetCSSISRaw function
