@@ -81,8 +81,8 @@ bgc_colors <- read.csv('data/WNA_v12_HexCols.csv')
 bgc_colors <- bgc_colors%>% filter(BGC!="(None)")
 
 #load E1, S1 for feasibility
-load("data/E1.rda")
-load("data/S1.rda")
+#load("data/E1.rda")
+#load("data/S1.rda")
 
 
 #load BC raster layer
@@ -102,5 +102,5 @@ bc_raster <- raster::setValues(bc_raster,NA)
 bc_districts <- nr_districts() %>%
                 dplyr::select(ORG_UNIT, geometry)
 
-
-
+#load model data
+modelMetadata <- read.csv("data/ModelList.csv")
