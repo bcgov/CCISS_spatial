@@ -11,19 +11,12 @@ ui <- tagList(
           
            tabPanel("App",
                     
-                  #div(id = 'Sidebar',
-                  #sidebarPanel(
+                  #absolutePanel with user defined inputs
                   column(8,
                   absolutePanel(top = 60, left = 5, right = "auto", bottom = "auto",
                                 width = 300, height = "auto",draggable = TRUE,
                     
                    wellPanel(
-                    #        selectInput("dist", 
-                    #                    label = "Select a district",
-                    #                    choices = c("All BC", districts),
-                    #                    selected = "All BC"
-                    #                    ),
-                           
                            radioButtons("type", inline = FALSE, 
                                         label = "Choose the type of map",
                                         choices = list("Biogeoclimatic units" = 1, "Species feasibility" = 2),
@@ -52,20 +45,18 @@ ui <- tagList(
                                         choices = periodOpts
                            )
                            
-                           #switchInput(inputId = "showlegend", value = FALSE, label = "Show map legend")
                     ),
                     style = "opacity: 0.65; z-index: 10 !important;"),
-                    
+                  
+                  #Map 
                   leafletOutput(outputId = "map", height = 700),
                   htmlOutput("zoomlevel_display"),
                   
                   #DT::dataTableOutput("test_tb")
                   ),
                     
-                      
-                      
-                      
-                      column(4, 
+                  #Graphical summary and user upload shape file   
+                  column(4, 
                              
                              selectInput("subarea", 
                                          label = "Choose a subregion",
@@ -110,17 +101,8 @@ ui <- tagList(
                                         ),
                                         plotlyOutput("climatevarplot")%>%withSpinner())
                              )
-                             
-                             
-                             
-                             
-
                       )
                    
-            
-          
-           
-            
            ),
            tabPanel("About",
                     includeMarkdown("about.Rmd")
@@ -128,5 +110,4 @@ ui <- tagList(
            tabPanel("Model Info",
                     verbatimTextOutput("summary")
            )
-)
-)
+))

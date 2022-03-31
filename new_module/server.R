@@ -3,7 +3,8 @@ server <- function(input, output, session) {
   #set initial value
   mapInputs <- reactiveValues(map_zoom_init = 5)
   
-  
+  #define data source based on zoom level
+  #define inputs based on user inputs
   observe({
     req(mapInputs$map_zoom_init)
     
@@ -34,6 +35,7 @@ server <- function(input, output, session) {
     
     
     if(input$type == 2){
+      #recode inputs for feasibility datasets
       mapInputs$feastime <- switch(input$time, "2001-2020" = 1,
                                               "2021-2040" = 2,
                                               "2041-2060" = 3,
@@ -48,29 +50,20 @@ server <- function(input, output, session) {
     
   })
   
+  #collect zoom level and bounding box from leaflet map
   observe({
-    
     mapInputs$map_zoom_init <- input$map_zoom
     mapInputs$map_bounds <- input$map_bounds
-    
   })
   
-  
-  #only query climate y axis data when switch is on
-  # observeEvent(input$showclimate,{
-  #   
-  #   shinyjs::toggle("var2")
-  #   shinyjs::toggle("climatevarplot")
-  #   
-  # })
-  
+  #reactiveValues for data used in leaflet map
   mapData <- reactiveValues(mapData = NULL,
                             mapCol = NULL)
   
   
   
   
-  #cache results for raster layer in reactive
+  #raster layer for 2Km grid data
   rasterlayer <- reactive({
 
     withProgress(message = "Retrieving 2Km grid data from database", value = 0, {
@@ -148,22 +141,19 @@ server <- function(input, output, session) {
       
     }
       
-      
     }else{
       
       bc_raster <- bc_raster
       bc_raster_cols <- pal
     }
-      
-    
-      
     })
     
     return(list(bc_raster = bc_raster,
                 bc_raster_cols = pal))
   })
   
-  
+
+  #vector data for 400m grid data  
   vectorlayer <- reactive({
 
     
@@ -264,8 +254,9 @@ server <- function(input, output, session) {
     
   })
   
-  
-observe({
+
+  #define data source for leaflet map based on zoom level
+  observe({
     
    req(mapInputs$zoomlevel)
     
@@ -287,6 +278,7 @@ observe({
     
   })
   
+  #print out current map zoom level
   output$zoomlevel_display <- renderUI({
     
     HTML(paste0("<b>Zoom level: ",mapInputs$map_zoom_init,"</b>",
@@ -294,7 +286,7 @@ observe({
     
     })
   
-  
+  #Initiate leaflet map
   output$map <- renderLeaflet({
     
     leaflet(options = leafletOptions(minZoom = 5, maxZoom = 12)) %>%
@@ -306,12 +298,10 @@ observe({
     
   })
   
-  
-observe({
+  #add layers to leaflet map based on map type
+  observe({
     req(mapData$mapData)
-    #req(mapInputs$map_zoom_init)
-  
-
+    
   if(mapInputs$zoomlevel == 2 ){
     
     if(mapInputs$type == 1) {
@@ -344,7 +334,8 @@ observe({
         addCircleMarkers(
           fillOpacity = input$opacity,
           color = ~ pal(newsuit),
-          radius = 5
+          radius = 5,
+          label = ~ newsuit
         )%>%
         stopSpinner()%>%
         addLegend(pal = pal, values = c(1:5),
@@ -361,7 +352,8 @@ observe({
           addCircleMarkers(
             fillOpacity = input$opacity,
             color = ~ pal(newsuit),
-            radius = 5
+            radius = 5,
+            label = ~ newsuit
           )%>%
           stopSpinner()%>%
           addLegend(pal = pal, values = c(1,2,3),
@@ -376,14 +368,13 @@ observe({
           addCircleMarkers(
             fillOpacity = input$opacity,
             color = ~ pal(Diff),
-            radius = 5
+            radius = 5,
+            label = ~ Diff
           )%>%
           stopSpinner()%>%
           addLegend(pal = pal, values = c(-3,-2,-1,0,1,2,3),
                     title = "Mean change")
       }
-      
-      
     }
 
   }else{
@@ -422,9 +413,10 @@ observe({
 })
 
 
-observeEvent(input$subarea, {
+#grey out non-selected area based on region/district selection
+ observeEvent(input$subarea, {
 
-if(input$subarea != "None") {
+ if(input$subarea != "None") {
   
   if(input$subarea == "User upload"){
     poly_diff <- user_upload$outputs$poly_diff
@@ -450,11 +442,11 @@ if(input$subarea != "None") {
     removeShape(layerId = "masking") %>%
     addPolygons(data = poly_diff,color = "transparent", fillColor = "#D3D3D3" , fillOpacity = 0.8, layerId = "masking")
   
-}else{
+  }else{
   
   leafletProxy("map") %>%
     removeShape(layerId = "masking")
-}
+ }
   
 })
 
@@ -486,6 +478,10 @@ if(input$subarea != "None") {
 #   }
 # 
 # })
+
+
+#retrieve climate data from database based on time period and scenarios
+#current implementation only include MAT, MCMT, TD and EMT
 
   climateData <- reactive({
     
@@ -519,6 +515,9 @@ if(input$subarea != "None") {
     return(climdata)
   })
   
+
+#define data used for graphical summary (BGC area plot and Tree species feasibility area plot V.S climate variable)
+#TODO: verify climate variable data
   
   plotData <- reactive({
 
@@ -583,6 +582,9 @@ if(input$subarea != "None") {
 
     
   })
+
+  #update selectizeInput choices for BGC subzone selection for BGC area plot
+  #only include subzones available in the dataset
   
   observeEvent(plotData(),{
     
@@ -590,6 +592,7 @@ if(input$subarea != "None") {
     updateSelectizeInput(session, "subzone", choices = subzones, selected = subzones[grepl("CWH", subzones)])
   })
   
+  #graphical summary plots
   output$scatterplot<- renderPlotly({
     
     dat <- plotData()
@@ -638,7 +641,7 @@ if(input$subarea != "None") {
     
   })
   
-  
+  #climate variable correlation plot
   output$climatevarplot <- renderPlotly({
     
     climdata <- climateData()
@@ -649,14 +652,15 @@ if(input$subarea != "None") {
     dat <- xvar[yvar, on = 'bgc']
     
     plot_ly(dat, x = ~ change, y = ~ i.change, type = "scatter", mode = "markers")%>%
-      layout(xaxis = list(title = paste0("Change in ",input$var1,"\n", climvars_label$Variable[climvars_label$Code == input$var1])),
-             yaxis = list(title = paste0("Change in ",input$var2,"\n", climvars_label$Variable[climvars_label$Code == input$var2])))
+      layout(xaxis = list(title = paste0("Change in ",input$climvar1,"\n", climvars_label$Variable[climvars_label$Code == input$climvar1])),
+             yaxis = list(title = paste0("Change in ",input$climvar2,"\n", climvars_label$Variable[climvars_label$Code == input$climvar2])))
   })
   
   
-
+  #call module for user uploaded area of interest (shape file)
   user_upload <- callModule(uploadFileServer,"uploadfile")
-  
+
+  #update selectInput choices ,add "User upload" to the dropdown list
   observeEvent(user_upload$outputs$bgc,{
     
     add_choice <- user_upload$filename()
@@ -664,6 +668,7 @@ if(input$subarea != "None") {
     
   }, ignoreNULL = TRUE)
   
+  #test output from call module
   # output$test_tb <- DT::renderDT({
   #   req(user_upload)
   # 
