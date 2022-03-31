@@ -55,23 +55,26 @@ dbGetCCISSRaw2 <- function(con, poly, gcm, scenario, period){
 #' @param period Future time period
 
 
-dbGetFeas400m <- function(con, poly, gcm, scenario, period, spp, edatope){
+dbGetFeas400m <- function(con, poly, period, spp, edatope){
   
   cciss_sql <- paste0("
-    SELECT cciss_future12_array.siteno,
-         hex_points.geom,
-         pts2Km_feas.curr,
-         pts2Km_feas.newsuit
-  FROM pts2km_feas
-  JOIN hex_points
-    ON pts2km_feas.siteno = hex_points.siteno
+    SELECT b.geom,
+           a.curr,
+           a.newsuit
+  FROM pts400m_feas a
+  JOIN hex_points b
+  ON a.siteno = b.siteno
   WHERE st_intersects(geom, 'SRID=3005;",poly,"')
-  AND futureperiod_id = IN ('",paste(unique(period), collapse = "','"), "')
-  AND scenario IN ('",paste(unique(scenario), collapse = "','"), "')
-  AND gcm IN ('",paste(unique(gcm), collapse = "','"), "')
+  AND a.futureperiod_id IN (",paste(unique(period), collapse = ","), ")
+  AND a.species_id IN (",paste(unique(spp), collapse = ","), ")
+  AND a.edatope_id IN (",paste(unique(edatope), collapse = ","), ")
   ")
   
+  RPostgres::dbExecute(con,  "set enable_seqscan = off")
   dat <- setDT(st_read(con, query = cciss_sql))
+  
+  RPostgres::dbExecute(con,  "set enable_seqscan = on")
+  
   #dat <- unique(dat)
   return(dat)
 }
@@ -145,10 +148,14 @@ dbGetCCISSRaw3 <- function(con, poly){
          labels.scenario,
          labels.futureperiod,
          bgc_attribution.bgc,
-         bgc.bgc bgc_pred
+         bgc.bgc bgc_pred,
+         pts400m_feas.species_id,
+         pts400m_feas.edatope_id
   FROM cciss_future12_array
   JOIN hex_points
     ON cciss_future12_array.siteno = hex_points.siteno
+  JOIN pts400m_feas
+    ON cciss_future12_array.siteno = pts400m_feas.siteno
   JOIN bgc_attribution
     ON (cciss_future12_array.siteno = bgc_attribution.siteno),
        unnest(bgc_pred_id) WITH ordinality as source(bgc_pred_id, row_idx)
@@ -163,7 +170,6 @@ dbGetCCISSRaw3 <- function(con, poly){
   JOIN bgc
     ON bgc.bgc_id = source.bgc_pred_id
   WHERE st_intersects(geom, 'SRID=3005;",poly,"')
-  AND futureperiod = '2021'
   ")
   
   dat <- setDT(dbGetQuery(con, cciss_sql))
@@ -224,3 +230,4 @@ feasCal <- function(bgc, E1, S1) {
   return(sspFeas)  
   
 }
+
