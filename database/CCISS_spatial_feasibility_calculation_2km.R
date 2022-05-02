@@ -1,13 +1,25 @@
 #calculate species feasibility for raster grids
 library(data.table)
 library(RPostgres)
+library(RPostgreSQL)
 library(dplyr)
 library(pool)
 
 source('feasibility_functions.R')
 load('new_module/data/E1.rda')
 load('new_module/data/E1_Phase.rda')
-load('new_module/data/S1.rda')
+#load('new_module/data/S1.rda')
+##bybec db connection
+sppDb <- dbPool(
+  drv = RPostgres::Postgres(),
+  dbname = "spp_feas",
+  host = Sys.getenv("BCGOV_HOST"),
+  port = 5432,
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+)
+S1 <- setDT(dbGetQuery(sppDb,"select bgc,ss_nospace,spp,newfeas from feasorig"))
+setnames(S1,c("BGC","SS_NoSpace","Spp","Feasible"))
 
 pool <- dbPool(
   drv = RPostgres::Postgres(),
@@ -52,7 +64,7 @@ species_param <- c("Pl","Sx","Fd","Py","Lw","Bl")
 sql <- paste0("SELECT species_id, species FROM species WHERE species IN ('", 
               paste(unique(species_param), collapse = "','"), 
               "') ")
-species <- setDT(RPostgres::dbGetQuery(pool, sql))
+species <- setDT(dbGetQuery(pool, sql))
 
 
 
@@ -60,7 +72,7 @@ edatope_param <- c("B2","C4","E6")
 sql <- paste0("SELECT edatope_id, edatope FROM edatope WHERE edatope IN ('", 
               paste(unique(edatope_param), collapse = "','"), 
               "') ")
-edatopes <- setDT(RPostgres::dbGetQuery(pool, sql))
+edatopes <- setDT(dbGetQuery(pool, sql))
 
 
 
@@ -153,8 +165,8 @@ for (fp_index in 1:nrow(futureperiods))
             
             
             ## Persist the DF into the DB
-            
-            RPostgres::dbAppendTable(pool, "pts2km_feas", df)
+            dbWriteTable(pool, "pts2km_feas", df, append = T, row.names = F)
+            ##RPostgres::dbAppendTable(pool, "pts2km_feas", df)
             
             df <- NULL
             

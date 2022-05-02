@@ -2,14 +2,25 @@
 
 library(data.table)
 library(RPostgres)
+library(RPostgreSQL)
 library(dplyr)
 library(pool)
 
 
-source('feasibility_functions.R')
+source('new_module/feasibility_functions.R')
 load('new_module/data/E1.rda')
 load('new_module/data/E1_Phase.rda')
-load('new_module/data/S1.rda')
+##load('new_module/data/S1.rda')
+sppDb <- dbPool(
+  drv = RPostgres::Postgres(),
+  dbname = "spp_feas",
+  host = Sys.getenv("BCGOV_HOST"),
+  port = 5432,
+  user = Sys.getenv("BCGOV_USR"),
+  password = Sys.getenv("BCGOV_PWD")
+)
+S1 <- setDT(dbGetQuery(sppDb,"select bgc,ss_nospace,spp,newfeas from feasorig"))
+setnames(S1,c("BGC","SS_NoSpace","Spp","Feasible"))
 
 pool <- dbPool(
     drv = RPostgres::Postgres(),
@@ -64,12 +75,6 @@ sql <-"SELECT dist_code FROM dist_codes ORDER BY dist_code";
 districts <- setDT(RPostgres::dbGetQuery(pool, sql))
 
 
-
-
-
-
-
-
 ## PURGE AND MAINTENANCE OF pts400m_feas
 sql <- "DELETE FROM pts400m_feas"
 RPostgres::dbExecute(pool, sql)
@@ -81,8 +86,7 @@ bag_no <- 0;
 
 
 
-for (dist_index in 1:nrow(districts))
-{
+for (dist_index in 1:nrow(districts)){
   dist_start = Sys.time()
   
   print(" ")
@@ -129,16 +133,14 @@ for (dist_index in 1:nrow(districts))
       
       
       
-      for (spp_index in 1:nrow(species))
-      {
+      for (spp_index in 1:nrow(species)){
         spp_start =  Sys.time()
         
         bag <- paste(edatopes$edatope[edatope_index], futureperiods[fp_index,"futureperiod"], species[spp_index, "species"], "(", spp_index, "of", nrow(species),")")
         print(paste("    Working on bag", bag))
         
         
-        out <- tryCatch(
-          {
+        out <- tryCatch({
             ######  BEGIN ORIGINAL SINGLE EXECUTION -- CALL TO dbGetCCISS_4km done in outer loop
             
             ##the "newSuit" column in sppFeas is the predicted feasibility value
@@ -151,8 +153,7 @@ for (dist_index in 1:nrow(districts))
             ######  END ORIGINAL SINGLE EXECUTION
             
             
-            if (nrow(sppFeas)>0)
-            {
+            if (nrow(sppFeas)>0){
               ## Preprocess dataframe for upload to PostgreSQL table pts2km_feas
               df <- sppFeas
               
@@ -177,8 +178,7 @@ for (dist_index in 1:nrow(districts))
               
               
               ## Persist the DF into the DB
-              
-              RPostgres::dbAppendTable(pool, "pts400m_feas", df)
+              dbWriteTable(pool, "pts400m_feas", df, append = T, row.names = F)
               
               df <- NULL
               
