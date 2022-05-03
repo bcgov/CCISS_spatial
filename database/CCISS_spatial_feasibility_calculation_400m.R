@@ -14,7 +14,7 @@ load('new_module/data/E1_Phase.rda')
 sppDb <- dbPool(
   drv = RPostgres::Postgres(),
   dbname = "spp_feas",
-  host = Sys.getenv("BCGOV_HOST"),
+  host = Sys.getenv("BCGOV_HOST_INTERNAL"),
   port = 5432,
   user = Sys.getenv("BCGOV_USR"),
   password = Sys.getenv("BCGOV_PWD")
@@ -25,7 +25,7 @@ setnames(S1,c("BGC","SS_NoSpace","Spp","Feasible"))
 pool <- dbPool(
     drv = RPostgres::Postgres(),
     dbname = Sys.getenv("BCGOV_DB"),
-    host = Sys.getenv("BCGOV_HOST"),
+    host = Sys.getenv("BCGOV_HOST_INTERNAL"),
     port = 5432,
     user = Sys.getenv("BCGOV_USR"),
     password = Sys.getenv("BCGOV_PWD")
@@ -85,7 +85,7 @@ total_bags <- nrow(districts) * nrow(futureperiods) * nrow(species) * nrow(edato
 bag_no <- 0;
 
 
-
+sink("routput.txt")
 for (dist_index in 1:nrow(districts)){
   dist_start = Sys.time()
   
@@ -181,7 +181,7 @@ for (dist_index in 1:nrow(districts)){
               dbWriteTable(pool, "pts400m_feas", df, append = T, row.names = F)
               
               df <- NULL
-              
+              gc()
               print("     ... dbAppendTable Done")
             }
             else 
@@ -219,5 +219,6 @@ for (dist_index in 1:nrow(districts)){
   
   
 }
+sink()
 gc()
 print("COMPLETED")

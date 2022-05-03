@@ -204,7 +204,7 @@ server <- function(input, output, session) {
     
     
     if(mapInputs$type ==2){
-      
+      browser()
       incProgress(0.6, detail = "Retrieving 400m grid Feasibility results")
       #load BGC projections
       dat <- dbGetFeas400m(pool_dev,poly,mapInputs$feastime,mapInputs$sppPick,mapInputs$edaPick)

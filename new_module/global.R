@@ -9,7 +9,6 @@ library(leaflet.extras2)
 #library(leaflet.opacity)
 library(sf)
 library(dplyr)
-library(dbplyr)
 library(rpostgis)
 library(DBI)
 library(RPostgres)
@@ -23,6 +22,7 @@ library(DT)
 library(RColorBrewer)
 library(colourvalues)
 library(bcmaps)
+library(dbplyr)
 
 
 source("mod_user_upload.R")
@@ -43,10 +43,10 @@ pool <- dbPool(
 
 pool_dev <- dbPool(
   drv = RPostgres::Postgres(),
-  #dbname = Sys.getenv("BCGOV_DB"),
-  #host = Sys.getenv("BCGOV_HOST"),
-  dbname = 'postgres',
-  host = Sys.getenv("AWS_HOST"),
+  dbname = Sys.getenv("BCGOV_DB"),
+  host = Sys.getenv("BCGOV_HOST"),
+  #dbname = 'postgres',
+  #host = Sys.getenv("AWS_HOST"),
   port = 5432, 
   user = Sys.getenv("BCGOV_USR"),
   password = Sys.getenv("BCGOV_PWD")
