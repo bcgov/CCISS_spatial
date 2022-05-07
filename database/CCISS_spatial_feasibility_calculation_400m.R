@@ -76,17 +76,19 @@ districts <- setDT(RPostgres::dbGetQuery(pool, sql))
 
 
 ## PURGE AND MAINTENANCE OF pts400m_feas
-sql <- "DELETE FROM pts400m_feas"
-RPostgres::dbExecute(pool, sql)
-sql <- "VACUUM FULL pts400m_feas"
-RPostgres::dbExecute(pool, sql)
+# sql <- "DELETE FROM pts400m_feas"
+# RPostgres::dbExecute(pool, sql)
+# sql <- "VACUUM FULL pts400m_feas"
+# RPostgres::dbExecute(pool, sql)
 ## NOW LOOP AND EXECUTE ALL PERMUTATIONS OF FuturePeriod + Species
 total_bags <- nrow(districts) * nrow(futureperiods) * nrow(species) * nrow(edatopes)  
 bag_no <- 0;
+dist_list <- districts$dist_code
+num_stopped <- which(dist_list == "DND")
+#left <- dist_list[num_stopped:length(dist_list)]
 
-
-sink("routput.txt")
-for (dist_index in 1:nrow(districts)){
+sink("routput.txt",type = "message")
+for (dist_index in num_stopped:nrow(districts)){
   dist_start = Sys.time()
   
   print(" ")
