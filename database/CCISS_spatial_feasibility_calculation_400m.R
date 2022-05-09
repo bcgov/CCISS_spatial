@@ -84,7 +84,7 @@ districts <- setDT(RPostgres::dbGetQuery(pool, sql))
 total_bags <- nrow(districts) * nrow(futureperiods) * nrow(species) * nrow(edatopes)  
 bag_no <- 0;
 dist_list <- districts$dist_code
-num_stopped <- which(dist_list == "DND")
+num_stopped <- which(dist_list == "DVA") + 1
 #left <- dist_list[num_stopped:length(dist_list)]
 
 sink("routput.txt",type = "message")
